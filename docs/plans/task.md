@@ -13,7 +13,7 @@
 | Task 4: Chunk Splitter & Record Counter Support | Completed | chunk.go, chunk_test.go, csv.go |
 | Task 5: Integration Across Decoder, Unmarshal, Generic, and Parallel APIs | Completed | decoder.go, csv.go, generic.go, parallel.go, custom_delim_test.go |
 | Task 6: Comprehensive Verification, Tag & Push | Completed | git commit, tag v0.2.0, push to GitHub |
-| Task 7: Portable SIMD Scanner | Pending | scan_simd.go, scan_fallback.go, scan_test.go |
+| Task 7: Portable SIMD Scanner | Completed | scan_simd.go, scan_fallback.go, scan_test.go |
 | Task 8: Custom Encoding Engine (EUC-KR, Shift_JIS, CP949) | Pending | encoding.go, encoding_test.go, option.go, reader.go |
 | Task 9: AGENTS.md English Language Rule & Path Config | Pending | AGENTS.md |
 | Task 10: Comprehensive English README.md | Pending | README.md |
