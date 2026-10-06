@@ -154,4 +154,81 @@ func TestCRLFBoundaryShift(t *testing.T) {
 	}
 }
 
+func TestReaderCustomDelimiterPipe(t *testing.T) {
+	data := "a|b|c\n1|2|3\n"
+	r := NewReader(strings.NewReader(data), WithDelimiter("|"))
+	rec, err := r.Read()
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if len(rec) != 3 || rec[0] != "a" || rec[1] != "b" || rec[2] != "c" {
+		t.Fatalf("unexpected record: %v", rec)
+	}
+}
+
+func TestReaderMultiCharDelimiter(t *testing.T) {
+	data := "col1||col2||col3\nval1||val2||val3\n"
+	r := NewReader(strings.NewReader(data), WithDelimiter("||"))
+	rec1, err := r.Read()
+	if err != nil {
+		t.Fatalf("read row 1 failed: %v", err)
+	}
+	if len(rec1) != 3 || rec1[0] != "col1" || rec1[1] != "col2" || rec1[2] != "col3" {
+		t.Fatalf("unexpected row 1: %v", rec1)
+	}
+
+	rec2, err := r.Read()
+	if err != nil {
+		t.Fatalf("read row 2 failed: %v", err)
+	}
+	if len(rec2) != 3 || rec2[0] != "val1" || rec2[1] != "val2" || rec2[2] != "val3" {
+		t.Fatalf("unexpected row 2: %v", rec2)
+	}
+}
+
+func TestReaderCustomQuote(t *testing.T) {
+	// Single quote as quote char, with '' escape
+	data := "'hello''world',foo,'bar'\n"
+	r := NewReader(strings.NewReader(data), WithQuote('\''))
+	rec, err := r.Read()
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if len(rec) != 3 {
+		t.Fatalf("expected 3 fields, got %d: %v", len(rec), rec)
+	}
+	if rec[0] != "hello'world" {
+		t.Errorf("rec[0] = %q, want \"hello'world\"", rec[0])
+	}
+	if rec[1] != "foo" {
+		t.Errorf("rec[1] = %q, want \"foo\"", rec[1])
+	}
+	if rec[2] != "bar" {
+		t.Errorf("rec[2] = %q, want \"bar\"", rec[2])
+	}
+}
+
+func TestReaderCustomQuoteAndMultiDelim(t *testing.T) {
+	// Multi-char delimiter '::' and single quote '\''
+	data := "'first::part'::'second''escaped'::unquoted_val\n"
+	r := NewReader(strings.NewReader(data), WithDelimiter("::"), WithQuote('\''))
+	rec, err := r.Read()
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if len(rec) != 3 {
+		t.Fatalf("expected 3 fields, got %d: %v", len(rec), rec)
+	}
+	if rec[0] != "first::part" {
+		t.Errorf("rec[0] = %q, want 'first::part'", rec[0])
+	}
+	if rec[1] != "second'escaped" {
+		t.Errorf("rec[1] = %q, want \"second'escaped\"", rec[1])
+	}
+	if rec[2] != "unquoted_val" {
+		t.Errorf("rec[2] = %q, want 'unquoted_val'", rec[2])
+	}
+}
+
+
 

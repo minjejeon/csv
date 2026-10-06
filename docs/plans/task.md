@@ -5,10 +5,11 @@
 | Task 3: Streaming ParallelReader Pipeline | Completed | parallel_reader.go, parallel_reader_test.go |
 | Task 4: Parallel Scalability Benchmarks | Completed | parallel_bench_test.go (256 MB/s, 2.5x speedup) |
 | Task 5: In-Place Slice Pre-Allocation Optimization | Completed | csv.go, parallel.go (1-thread: 94ms vs 166ms csvutil, 1.76x speedup) |
-| Task 6: Generic Zero-Reflection Unmarshaler (RecordUnmarshaler) | Completed | generic.go, generic_test.go, generic_bench_test.go (88ms / 210 MB/s sequential, 39ms parallel) |
-| Brainstorm: Explore project context | In Progress | Review reader, SIMD scanner, and delimiter handling |
-| Brainstorm: Ask clarifying questions | Pending | One question at a time |
-| Brainstorm: Propose 2-3 approaches | Pending | Single vs multi-char delimiter and quote matching |
-| Brainstorm: Present design sections | Pending | Scaled sections with approval |
-| Brainstorm: Write design doc | Pending | docs/plans/2026-10-06-custom-delimiter-and-quote-design.md |
-| Brainstorm: Transition to implementation | Pending | Invoke writing-plans skill |
+| Task 6: Generic Zero-Reflection Unmarshaler (RecordUnmarshaler) | Completed | generic.go, generic_test.go, generic_bench_test.go |
+| Brainstorm & Design Specification | Completed | docs/plans/2026-10-06-custom-delimiter-and-quote-design.md |
+| Task 1: Functional Options Core | Completed | option.go, option_test.go |
+| Task 2: Scanner Custom Delimiter & Quote Vector Search | Completed | scan_simd.go, scan_swar.go, scan_fallback.go, scan_test.go |
+| Task 3: Reader Multi-Char Delimiter & Custom Quote Engine | Completed | reader.go, reader_test.go |
+| Task 4: Chunk Splitter & Record Counter Support | Pending | chunk.go, chunk_test.go, csv.go |
+| Task 5: Integration Across Decoder, Unmarshal, Generic, and Parallel APIs | Pending | decoder.go, csv.go, generic.go, parallel.go, custom_delim_test.go |
+| Task 6: Comprehensive Verification, Tag & Push | Pending | git commit, tag v0.2.0, push to GitHub |

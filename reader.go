@@ -144,9 +144,10 @@ func (r *Reader) Close() error {
 
 func (r *Reader) unescape(b []byte) []byte {
 	r.fieldBufHolder.buf = r.fieldBufHolder.buf[:0]
+	q := r.quoteByte
 	for i := 0; i < len(b); i++ {
-		if b[i] == '"' && i+1 < len(b) && b[i+1] == '"' {
-			r.fieldBufHolder.buf = append(r.fieldBufHolder.buf, '"')
+		if b[i] == q && i+1 < len(b) && b[i+1] == q {
+			r.fieldBufHolder.buf = append(r.fieldBufHolder.buf, q)
 			i++ // skip escaped quote
 		} else {
 			r.fieldBufHolder.buf = append(r.fieldBufHolder.buf, b[i])
@@ -204,10 +205,17 @@ func (r *Reader) ensureMore() (int, error) {
 
 // ReadRecord reads one record and returns a zero-copy Record referencing the internal buffer.
 func (r *Reader) ReadRecord() (*Record, error) {
-	delim := byte(r.Comma)
-	if r.Comma == 0 {
-		delim = ','
+	if r.delimBytes == nil ||
+		(len(r.delimBytes) == 1 && r.Comma != 0 && rune(r.delimBytes[0]) != r.Comma) ||
+		(r.Delimiter != "" && string(r.delimBytes) != r.Delimiter) ||
+		(r.Quote != 0 && r.quoteByte != byte(r.Quote)) {
+		if len(r.delimBytes) == 1 && r.Comma != 0 && rune(r.delimBytes[0]) != r.Comma && r.Delimiter == string(r.delimBytes) {
+			r.Delimiter = string(r.Comma)
+		}
+		r.initDelimAndQuote()
 	}
+	delim := r.delimBytes[0]
+
 
 	r.record.spans = r.record.spans[:0]
 
@@ -301,16 +309,16 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		}
 
 		// Check if quoted field
-		if r.pos < r.end && r.buf[r.pos] == '"' {
+		if r.pos < r.end && r.buf[r.pos] == r.quoteByte {
 			r.pos++ // consume opening quote
 			r.currFieldStart = r.pos
 			hasEscapes := false
 
 			for {
-				idx := bytes.IndexByte(r.buf[r.pos:r.end], '"')
+				idx := bytes.IndexByte(r.buf[r.pos:r.end], r.quoteByte)
 				if idx >= 0 {
 					quotePos := r.pos + idx
-					if quotePos+1 >= r.end && !r.eof {
+					for quotePos+1 >= r.end && !r.eof {
 						shift, err := r.ensureMore()
 						if err != nil {
 							return nil, err
@@ -319,12 +327,32 @@ func (r *Reader) ReadRecord() (*Record, error) {
 					}
 
 					var fieldEnd int
-					if quotePos+1 < r.end && r.buf[quotePos+1] == '"' {
-						// Escaped quote ""
+					if quotePos+1 < r.end && r.buf[quotePos+1] == r.quoteByte {
+						// Escaped quote
 						hasEscapes = true
 						r.pos = quotePos + 2
 						continue
-					} else if (quotePos+1 < r.end && (r.buf[quotePos+1] == delim || r.buf[quotePos+1] == '\r' || r.buf[quotePos+1] == '\n' || r.buf[quotePos+1] == ' ' || r.buf[quotePos+1] == '\t')) ||
+					}
+
+					if r.isMultiDelim {
+						for quotePos+1+len(r.delimBytes) > r.end && !r.eof {
+							shift, err := r.ensureMore()
+							if err != nil {
+								return nil, err
+							}
+							quotePos -= shift
+						}
+					}
+
+					isDelimNext := false
+					if !r.isMultiDelim {
+						isDelimNext = quotePos+1 < r.end && r.buf[quotePos+1] == delim
+					} else {
+						isDelimNext = quotePos+1 < r.end && bytes.HasPrefix(r.buf[quotePos+1:r.end], r.delimBytes)
+					}
+
+					if isDelimNext ||
+						(quotePos+1 < r.end && (r.buf[quotePos+1] == '\r' || r.buf[quotePos+1] == '\n' || r.buf[quotePos+1] == ' ' || r.buf[quotePos+1] == '\t')) ||
 						(quotePos+1 >= r.end && r.eof) {
 						// Valid closing quote followed by delimiter, newline, whitespace, or EOF
 						fieldEnd = quotePos
@@ -339,7 +367,11 @@ func (r *Reader) ReadRecord() (*Record, error) {
 
 					// Scan until delimiter, newline, or EOF
 					for {
-						if r.pos >= r.end && !r.eof {
+						need := 1
+						if r.isMultiDelim {
+							need = len(r.delimBytes)
+						}
+						for r.pos+need > r.end && !r.eof {
 							shift, err := r.ensureMore()
 							if err != nil {
 								return nil, err
@@ -349,8 +381,14 @@ func (r *Reader) ReadRecord() (*Record, error) {
 						if r.pos >= r.end && r.eof {
 							break
 						}
+						if !r.isMultiDelim && r.buf[r.pos] == delim {
+							break
+						}
+						if r.isMultiDelim && bytes.HasPrefix(r.buf[r.pos:r.end], r.delimBytes) {
+							break
+						}
 						b := r.buf[r.pos]
-						if b == delim || b == '\r' || b == '\n' {
+						if b == '\r' || b == '\n' {
 							break
 						}
 						if !r.LazyQuotes && (b != ' ' && b != '\t') {
@@ -397,7 +435,39 @@ func (r *Reader) ReadRecord() (*Record, error) {
 					targetPos := r.pos + specIdx
 					c := r.buf[targetPos]
 
-					if c == delim || c == '\n' {
+					if !r.isMultiDelim && c == delim {
+						fieldEnd := targetPos
+						r.record.spans = append(r.record.spans, fieldSpan{
+							start:      uint32(r.currFieldStart),
+							end:        uint32(fieldEnd),
+							hasEscapes: false,
+						})
+						r.pos = targetPos
+						foundEnd = true
+						break
+					} else if r.isMultiDelim && c == r.delimBytes[0] {
+						for targetPos+len(r.delimBytes) > r.end && !r.eof {
+							shift, err := r.ensureMore()
+							if err != nil {
+								return nil, err
+							}
+							targetPos -= shift
+						}
+						if bytes.HasPrefix(r.buf[targetPos:r.end], r.delimBytes) {
+							fieldEnd := targetPos
+							r.record.spans = append(r.record.spans, fieldSpan{
+								start:      uint32(r.currFieldStart),
+								end:        uint32(fieldEnd),
+								hasEscapes: false,
+							})
+							r.pos = targetPos
+							foundEnd = true
+							break
+						} else {
+							r.pos = targetPos + 1
+							continue
+						}
+					} else if c == '\n' {
 						fieldEnd := targetPos
 						r.record.spans = append(r.record.spans, fieldSpan{
 							start:      uint32(r.currFieldStart),
@@ -443,7 +513,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 							r.pos = targetPos + 1
 							continue
 						}
-					} else if c == '"' {
+					} else if c == r.quoteByte {
 						if !r.LazyQuotes {
 							return nil, &ParseError{Line: recordLine, Err: ErrBareQuote}
 						}
@@ -472,17 +542,37 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		}
 
 		// Delimiter check
-		if r.pos < r.end && r.buf[r.pos] == delim {
-			r.pos++
-			if r.pos >= r.end && r.eof {
-				r.record.spans = append(r.record.spans, fieldSpan{
-					start:      uint32(r.pos),
-					end:        uint32(r.pos),
-					hasEscapes: false,
-				})
-				break
+		if !r.isMultiDelim {
+			if r.pos < r.end && r.buf[r.pos] == delim {
+				r.pos++
+				if r.pos >= r.end && r.eof {
+					r.record.spans = append(r.record.spans, fieldSpan{
+						start:      uint32(r.pos),
+						end:        uint32(r.pos),
+						hasEscapes: false,
+					})
+					break
+				}
+				continue
 			}
-			continue
+		} else {
+			for r.pos+len(r.delimBytes) > r.end && !r.eof {
+				if _, err := r.ensureMore(); err != nil {
+					return nil, err
+				}
+			}
+			if r.pos < r.end && bytes.HasPrefix(r.buf[r.pos:r.end], r.delimBytes) {
+				r.pos += len(r.delimBytes)
+				if r.pos >= r.end && r.eof {
+					r.record.spans = append(r.record.spans, fieldSpan{
+						start:      uint32(r.pos),
+						end:        uint32(r.pos),
+						hasEscapes: false,
+					})
+					break
+				}
+				continue
+			}
 		}
 
 		// Newline check
