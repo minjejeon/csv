@@ -15,6 +15,6 @@
 | Task 6: Comprehensive Verification, Tag & Push | Completed | git commit, tag v0.2.0, push to GitHub |
 | Task 7: Portable SIMD Scanner | Completed | scan_simd.go, scan_fallback.go, scan_test.go |
 | Task 8: Custom Encoding Engine (EUC-KR, Shift_JIS, CP949) | Completed | encoding.go, encoding_test.go, option.go, reader.go |
-| Task 9: AGENTS.md English Language Rule & Path Config | Pending | AGENTS.md |
+| Task 9: AGENTS.md English Language Rule & Path Config | Completed | AGENTS.md |
 | Task 10: Comprehensive English README.md | Pending | README.md |
 | Task 11: End-to-End Verification, Tag v0.3.0 & Push | Pending | git commit, tag v0.3.0, push to GitHub |
