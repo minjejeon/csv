@@ -19,6 +19,7 @@ type fieldGetterFunc func(structPtr unsafe.Pointer, w *Writer) error
 type fieldGetterPlan struct {
 	colName string
 	offset  uintptr
+	tag     csvTag
 	getter  fieldGetterFunc
 }
 
@@ -26,6 +27,7 @@ type typeMarshalPlan struct {
 	structType reflect.Type
 	fields     []fieldGetterPlan
 	headerRow  []string
+	hasUnique  bool
 }
 
 var marshalPlanCache sync.Map // reflect.Type -> *typeMarshalPlan
@@ -69,9 +71,14 @@ func buildTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
 			return nil, fmt.Errorf("csv: failed compiling getter for field %s: %w", fi.name, err)
 		}
 
+		if fi.tag.unique {
+			plan.hasUnique = true
+		}
+
 		plan.fields = append(plan.fields, fieldGetterPlan{
 			colName: colName,
 			offset:  fi.offset,
+			tag:     fi.tag,
 			getter:  getter,
 		})
 		plan.headerRow = append(plan.headerRow, colName)

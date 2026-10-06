@@ -24,6 +24,7 @@ type fieldPlan struct {
 type typePlan struct {
 	targetType reflect.Type
 	fields     []fieldPlan
+	hasUnique  bool
 }
 
 type planKey struct {
@@ -187,8 +188,17 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 		return nil, errors.New("csv: no matching fields found between headers and struct")
 	}
 
+	hasUnique := false
+	for _, f := range plannedFields {
+		if f.tag.unique {
+			hasUnique = true
+			break
+		}
+	}
+
 	return &typePlan{
 		targetType: t,
 		fields:     plannedFields,
+		hasUnique:  hasUnique,
 	}, nil
 }
