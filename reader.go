@@ -711,9 +711,21 @@ func (r *Reader) readRecordFastNoQuote(recordLine int) (*Record, bool, error) {
 
 	for {
 		if r.pos+32 > r.end {
-			r.pos = startPos
-			r.record.spans = r.record.spans[:0]
-			return nil, false, nil
+			for r.end-r.pos < 32 && !r.eof {
+				shift, err := r.ensureMore()
+				if err != nil {
+					r.pos = startPos
+					r.record.spans = r.record.spans[:0]
+					return nil, false, err
+				}
+				startPos -= shift
+				currStart -= shift
+			}
+			if r.pos+32 > r.end {
+				r.pos = startPos
+				r.record.spans = r.record.spans[:0]
+				return nil, false, nil
+			}
 		}
 
 		mDelim, mQuote, mEOL := r.scanner.scanBlock32(r.buf[r.pos : r.pos+32])
