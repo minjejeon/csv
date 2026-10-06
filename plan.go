@@ -166,6 +166,10 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 
 		if colIdx >= 0 && !usedCols[colIdx] {
 			usedCols[colIdx] = true
+			setter, err := compileSetter(sf.fieldType, sf.offset, sf.tag)
+			if err != nil {
+				return nil, err
+			}
 			plannedFields = append(plannedFields, fieldPlan{
 				fieldName: sf.name,
 				colIndex:  colIdx,
@@ -173,6 +177,7 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 				index:     sf.index,
 				fieldType: sf.fieldType,
 				tag:       sf.tag,
+				setter:    setter,
 			})
 		}
 	}
