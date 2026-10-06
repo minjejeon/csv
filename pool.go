@@ -96,3 +96,24 @@ func releaseFieldBufHolder(h *byteBufHolder) {
 	h.buf = h.buf[:0]
 	fieldBufPool.Put(h)
 }
+
+var writeBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, defaultBufferSize)
+		return &b
+	},
+}
+
+func acquireWriteBuf() *[]byte {
+	b := writeBufPool.Get().(*[]byte)
+	*b = (*b)[:0]
+	return b
+}
+
+func releaseWriteBuf(b *[]byte) {
+	if b == nil || cap(*b) < defaultBufferSize {
+		return
+	}
+	*b = (*b)[:0]
+	writeBufPool.Put(b)
+}
