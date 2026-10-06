@@ -18,3 +18,9 @@
 | Task 9: AGENTS.md English Language Rule & Path Config | Completed | AGENTS.md |
 | Task 10: Comprehensive English README.md | Completed | README.md |
 | Task 11: End-to-End Verification, Tag v0.3.0 & Push | Completed | git commit, tag v0.3.0, push to GitHub |
+| SIMD Optimization: Context Exploration & Prior Art Research (Arrow, DuckDB, Polars) | Completed | Arrow/DuckDB/Polars comparative analysis |
+| SIMD Optimization: Clarifying Questions & User Direction Alignment | Completed | Full-pipeline combination approved by user |
+| SIMD Optimization: 2-3 Architectural Approaches Proposal | Completed | Approach 1 (Tiered Fast-Path & Full Pipeline SIMD) selected |
+| SIMD Optimization: Present Design Sections & User Approval | In Progress | Presenting design sections |
+| SIMD Optimization: Write Design Doc & Git Commit | Pending | docs/plans/2026-10-07-simd-acceleration-design.md |
+| SIMD Optimization: Implementation Planning | Pending | via writing-plans skill |
