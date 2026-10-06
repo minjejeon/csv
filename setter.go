@@ -3,6 +3,7 @@ package csv
 import (
 	"encoding"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"time"
@@ -31,9 +32,9 @@ func parseSignedInt(b []byte, bitSize int) (int64, error) {
 
 	var maxVal uint64
 	if neg {
-		maxVal = 1 << (bitSize - 1)
+		maxVal = uint64(1) << (bitSize - 1)
 	} else {
-		maxVal = (1 << (bitSize - 1)) - 1
+		maxVal = (uint64(1) << (bitSize - 1)) - 1
 	}
 	cutoff := maxVal / 10
 	maxDigit := maxVal % 10
@@ -51,6 +52,9 @@ func parseSignedInt(b []byte, bitSize int) (int64, error) {
 	}
 
 	if neg {
+		if bitSize == 64 && n == uint64(1)<<63 {
+			return math.MinInt64, nil
+		}
 		return -int64(n), nil
 	}
 	return int64(n), nil
@@ -119,27 +123,14 @@ func parseBoolFast(b []byte) (bool, error) {
 }
 
 func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, error) {
-	// Check TextUnmarshaler on pointer type first
-	ptrType := reflect.PointerTo(t)
-	if ptrType.Implements(textUnmarshalerType) {
-		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				return nil
-			}
-			target := unsafe.Add(structPtr, offset)
-			val := reflect.NewAt(t, target)
-			u := val.Interface().(encoding.TextUnmarshaler)
-			return u.UnmarshalText(raw)
-		}, nil
-	}
-
 	if t == timeType {
 		return func(structPtr unsafe.Pointer, raw []byte) error {
 			if len(raw) == 0 {
 				if tag.omitEmpty {
+					*(*time.Time)(unsafe.Add(structPtr, offset)) = time.Time{}
 					return nil
 				}
-				return nil
+				return strconv.ErrSyntax
 			}
 			s := unsafe.String(unsafe.SliceData(raw), len(raw))
 			parsed, err := time.Parse(time.RFC3339, s)
@@ -152,6 +143,21 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 			}
 			*(*time.Time)(unsafe.Add(structPtr, offset)) = parsed
 			return nil
+		}, nil
+	}
+
+	// Check TextUnmarshaler on pointer type
+	ptrType := reflect.PointerTo(t)
+	if ptrType.Implements(textUnmarshalerType) {
+		return func(structPtr unsafe.Pointer, raw []byte) error {
+			target := unsafe.Add(structPtr, offset)
+			val := reflect.NewAt(t, target)
+			if len(raw) == 0 && tag.omitEmpty {
+				val.Elem().Set(reflect.Zero(t))
+				return nil
+			}
+			u := val.Interface().(encoding.TextUnmarshaler)
+			return u.UnmarshalText(raw)
 		}, nil
 	}
 

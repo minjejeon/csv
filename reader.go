@@ -119,6 +119,13 @@ func NewReader(r io.Reader, opts ...Option) *Reader {
 
 // Reset resets the Reader to read from r, reusing allocated buffers.
 func (r *Reader) Reset(rd io.Reader) {
+	if r.bufHolder == nil {
+		r.bufHolder = acquireReadBuf()
+		r.buf = *r.bufHolder
+		r.spanHolder = acquireSpanHolder()
+		r.fieldBufHolder = acquireFieldBufHolder()
+		r.record.r = r
+	}
 	if r.encoding != nil && rd != nil {
 		rd = transform.NewReader(rd, r.encoding.NewDecoder())
 	}
@@ -153,8 +160,11 @@ func (r *Reader) Close() error {
 	return nil
 }
 
-func (r *Reader) unescape(b []byte) []byte {
-	r.fieldBufHolder.buf = r.fieldBufHolder.buf[:0]
+func (r *Reader) unescapeSpan(span *fieldSpan, b []byte) []byte {
+	if span.isUnescaped {
+		return r.fieldBufHolder.buf[span.unescapeStart : span.unescapeStart+span.unescapeLen]
+	}
+	startOffset := len(r.fieldBufHolder.buf)
 	q := r.quoteByte
 	for i := 0; i < len(b); i++ {
 		if b[i] == q && i+1 < len(b) && b[i+1] == q {
@@ -164,7 +174,10 @@ func (r *Reader) unescape(b []byte) []byte {
 			r.fieldBufHolder.buf = append(r.fieldBufHolder.buf, b[i])
 		}
 	}
-	return r.fieldBufHolder.buf
+	span.unescapeStart = uint32(startOffset)
+	span.unescapeLen = uint32(len(r.fieldBufHolder.buf) - startOffset)
+	span.isUnescaped = true
+	return r.fieldBufHolder.buf[span.unescapeStart : span.unescapeStart+span.unescapeLen]
 }
 
 // ensureMore reads more data from r.r into r.buf when r.pos >= r.end.
@@ -216,6 +229,9 @@ func (r *Reader) ensureMore() (int, error) {
 
 // ReadRecord reads one record and returns a zero-copy Record referencing the internal buffer.
 func (r *Reader) ReadRecord() (*Record, error) {
+	if r.bufHolder == nil {
+		return nil, errors.New("csv: reader is closed")
+	}
 	if r.initErr != nil {
 		return nil, r.initErr
 	}
@@ -230,8 +246,10 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	}
 	delim := r.delimBytes[0]
 
-
 	r.record.spans = r.record.spans[:0]
+	if r.fieldBufHolder != nil {
+		r.fieldBufHolder.buf = r.fieldBufHolder.buf[:0]
+	}
 
 	// 1. Skip leading comments and blank lines
 	for {
@@ -246,17 +264,21 @@ func (r *Reader) ReadRecord() (*Record, error) {
 
 		// Blank lines
 		if r.buf[r.pos] == '\r' {
-			r.pos++
-			if r.pos >= r.end && !r.eof {
+			if r.pos+1 >= r.end && !r.eof {
 				if _, err := r.ensureMore(); err != nil {
 					return nil, err
 				}
 			}
-			if r.pos < r.end && r.buf[r.pos] == '\n' {
+			if r.pos+1 < r.end && r.buf[r.pos+1] == '\n' {
+				r.pos += 2
+				r.line++
+				continue
+			} else if r.pos+1 >= r.end && r.eof {
 				r.pos++
+				r.line++
+				continue
 			}
-			r.line++
-			continue
+			break
 		}
 		if r.buf[r.pos] == '\n' {
 			r.pos++
@@ -592,17 +614,20 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		// Newline check
 		if r.pos < r.end {
 			if r.buf[r.pos] == '\r' {
-				r.pos++
-				if r.pos >= r.end && !r.eof {
+				if r.pos+1 >= r.end && !r.eof {
 					if _, err := r.ensureMore(); err != nil {
 						return nil, err
 					}
 				}
-				if r.pos < r.end && r.buf[r.pos] == '\n' {
+				if r.pos+1 < r.end && r.buf[r.pos+1] == '\n' {
+					r.pos += 2
+					r.line++
+					break
+				} else if r.pos+1 >= r.end && r.eof {
 					r.pos++
+					r.line++
+					break
 				}
-				r.line++
-				break
 			} else if r.buf[r.pos] == '\n' {
 				r.pos++
 				r.line++

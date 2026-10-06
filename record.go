@@ -34,12 +34,12 @@ func (rec *Record) Field(i int) []byte {
 	if i < 0 || i >= len(rec.spans) {
 		return nil
 	}
-	s := rec.spans[i]
+	s := &rec.spans[i]
 	raw := rec.raw[s.start:s.end]
 	if !s.hasEscapes {
 		return raw
 	}
-	return rec.r.unescape(raw)
+	return rec.r.unescapeSpan(s, raw)
 }
 
 // FieldString returns the unescaped string of field i.

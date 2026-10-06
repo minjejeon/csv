@@ -51,11 +51,11 @@ func lookupCharset(name string) (encoding.Encoding, error) {
 		return japanese.ShiftJIS, nil
 	case "eucjp":
 		return japanese.EUCJP, nil
-	case "gbk":
+	case "gbk", "gb2312":
 		return simplifiedchinese.GBK, nil
 	case "gb18030":
 		return simplifiedchinese.GB18030, nil
-	case "gb2312":
+	case "hzgb2312", "hz":
 		return simplifiedchinese.HZGB2312, nil
 	case "big5":
 		return traditionalchinese.Big5, nil

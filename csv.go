@@ -98,9 +98,6 @@ func Unmarshal(data []byte, v any, opts ...Option) error {
 			for _, f := range plan.fields {
 				if f.colIndex < numFields {
 					raw := rec.Field(f.colIndex)
-					if f.tag.omitEmpty && len(raw) == 0 {
-						continue
-					}
 					if err := f.setter(structPtr, raw); err != nil {
 						return fmt.Errorf("csv: error parsing field %q: %w", f.fieldName, err)
 					}
@@ -114,9 +111,6 @@ func Unmarshal(data []byte, v any, opts ...Option) error {
 			for _, f := range plan.fields {
 				if f.colIndex < numFields {
 					raw := rec.Field(f.colIndex)
-					if f.tag.omitEmpty && len(raw) == 0 {
-						continue
-					}
 					if err := f.setter(structPtr, raw); err != nil {
 						return fmt.Errorf("csv: error parsing field %q: %w", f.fieldName, err)
 					}

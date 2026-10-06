@@ -15,9 +15,12 @@ const initialFieldBufCap = 256
 
 // fieldSpan records the byte slice offsets of a CSV field within the active buffer
 type fieldSpan struct {
-	start      uint32
-	end        uint32
-	hasEscapes bool
+	start         uint32
+	end           uint32
+	unescapeStart uint32
+	unescapeLen   uint32
+	hasEscapes    bool
+	isUnescaped   bool
 }
 
 // spanHolder pools []fieldSpan without interface allocation on Put
