@@ -130,6 +130,19 @@ func countRecords(s []byte, quote ...byte) int {
 	if len(quote) > 0 && quote[0] != 0 {
 		q = quote[0]
 	}
+
+	// Fast path: if there are no quotes in the data, count newlines directly
+	if bytes.IndexByte(s, q) == -1 {
+		if len(s) == 0 {
+			return 0
+		}
+		n := bytes.Count(s, []byte{'\n'})
+		if s[len(s)-1] != '\n' {
+			n++
+		}
+		return n
+	}
+
 	cutset := string([]byte{'\n', q})
 
 	var n int

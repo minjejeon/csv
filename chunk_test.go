@@ -169,3 +169,18 @@ func TestCountRecordsCustomQuote(t *testing.T) {
 	}
 }
 
+func TestCountRecordsFastSIMD(t *testing.T) {
+	data := []byte("col1,col2\nval1,val2\nval3,val4\n")
+	count := countRecords(data)
+	if count != 3 {
+		t.Fatalf("expected 3 records, got %d", count)
+	}
+
+	dataNoTrailing := []byte("col1,col2\nval1,val2\nval3,val4")
+	countNoTrailing := countRecords(dataNoTrailing)
+	if countNoTrailing != 3 {
+		t.Fatalf("expected 3 records for no-trailing-newline, got %d", countNoTrailing)
+	}
+}
+
+

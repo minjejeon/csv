@@ -32,6 +32,31 @@ func splitChunks(data []byte, numWorkers int, quote ...byte) ([]chunkSpan, error
 	}
 
 	boundaries := []int{0}
+
+	// Fast path: if there are no quotes in data, jump straight to target positions using IndexByte
+	if bytes.IndexByte(data, q) == -1 {
+		for len(boundaries) < numWorkers {
+			nextTarget := boundaries[len(boundaries)-1] + targetChunkSize
+			if nextTarget >= n {
+				break
+			}
+			idx := bytes.IndexByte(data[nextTarget:], '\n')
+			if idx < 0 {
+				break
+			}
+			boundary := nextTarget + idx + 1
+			boundaries = append(boundaries, boundary)
+		}
+		if boundaries[len(boundaries)-1] != n {
+			boundaries = append(boundaries, n)
+		}
+		spans := make([]chunkSpan, len(boundaries)-1)
+		for i := 0; i < len(boundaries)-1; i++ {
+			spans[i] = chunkSpan{start: boundaries[i], end: boundaries[i+1]}
+		}
+		return spans, nil
+	}
+
 	currentPos := 0
 	inQuote := false
 	currentTarget := targetChunkSize
