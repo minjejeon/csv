@@ -28,17 +28,15 @@ type ParallelReader struct {
 }
 
 // NewParallelReader starts streaming records from r using worker goroutines.
-func NewParallelReader(r io.Reader, opts ...ParallelOptions) (*ParallelReader, error) {
+func NewParallelReader(r io.Reader, opts ...any) (*ParallelReader, error) {
+	parOpts, csvOpts := parseParallelAndCsvOpts(opts)
 	numWorkers := DefaultParallelWorkers
-	ordered := true
-	if len(opts) > 0 {
-		if opts[0].Workers > 0 {
-			numWorkers = opts[0].Workers
-		}
-		ordered = opts[0].Ordered
+	if parOpts.Workers > 0 {
+		numWorkers = parOpts.Workers
 	}
+	ordered := parOpts.Ordered
 
-	reader := NewReader(r)
+	reader := NewReader(r, csvOpts...)
 	batchSize := 500
 
 	pr := &ParallelReader{

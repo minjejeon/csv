@@ -18,9 +18,9 @@ type RecordUnmarshaler interface {
 func UnmarshalSlice[T any, PT interface {
 	*T
 	RecordUnmarshaler
-}](data []byte) ([]T, error) {
+}](data []byte, opts ...Option) ([]T, error) {
 	var out []T
-	if err := UnmarshalTo[T, PT](data, &out); err != nil {
+	if err := UnmarshalTo[T, PT](data, &out, opts...); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -31,8 +31,11 @@ func UnmarshalSlice[T any, PT interface {
 func UnmarshalTo[T any, PT interface {
 	*T
 	RecordUnmarshaler
-}](data []byte, out *[]T) error {
-	c := countRecords(data)
+}](data []byte, out *[]T, opts ...Option) error {
+	r := NewReader(bytes.NewReader(data), opts...)
+	defer r.Close()
+
+	c := countRecords(data, r.quoteByte)
 	if c > 1 {
 		c-- // exclude header
 	}
@@ -42,9 +45,6 @@ func UnmarshalTo[T any, PT interface {
 
 	// 100% static compile-time allocation without reflection
 	slice := make([]T, 0, c)
-
-	r := NewReader(bytes.NewReader(data))
-	defer r.Close()
 
 	// Read and discard header
 	if _, err := r.Read(); err != nil {
@@ -90,7 +90,7 @@ func UnmarshalTo[T any, PT interface {
 func ParallelUnmarshalSlice[T any, PT interface {
 	*T
 	RecordUnmarshaler
-}](data []byte, opts ...ParallelOptions) ([]T, error) {
+}](data []byte, opts ...any) ([]T, error) {
 	var out []T
 	if err := ParallelUnmarshalTo[T, PT](data, &out, opts...); err != nil {
 		return nil, err
@@ -102,19 +102,23 @@ func ParallelUnmarshalSlice[T any, PT interface {
 func ParallelUnmarshalTo[T any, PT interface {
 	*T
 	RecordUnmarshaler
-}](data []byte, out *[]T, opts ...ParallelOptions) error {
+}](data []byte, out *[]T, opts ...any) error {
+	parOpts, csvOpts := parseParallelAndCsvOpts(opts)
 	numWorkers := DefaultParallelWorkers
-	if len(opts) > 0 && opts[0].Workers > 0 {
-		numWorkers = opts[0].Workers
+	if parOpts.Workers > 0 {
+		numWorkers = parOpts.Workers
 	}
 
-	chunks, err := splitChunks(data, numWorkers)
+	dummy := NewReader(nil, csvOpts...)
+	quoteByte := dummy.quoteByte
+
+	chunks, err := splitChunks(data, numWorkers, quoteByte)
 	if err != nil {
 		return err
 	}
 
 	if len(chunks) <= 1 {
-		return UnmarshalTo[T, PT](data, out)
+		return UnmarshalTo[T, PT](data, out, csvOpts...)
 	}
 
 	numChunks := len(chunks)
@@ -127,7 +131,7 @@ func ParallelUnmarshalTo[T any, PT interface {
 	)
 
 	// Worker 0 reads header first
-	r0 := NewReader(bytes.NewReader(data[chunks[0].start:chunks[0].end]))
+	r0 := NewReader(bytes.NewReader(data[chunks[0].start:chunks[0].end]), csvOpts...)
 	if _, err := r0.Read(); err != nil {
 		r0.Close()
 		return err
@@ -145,11 +149,11 @@ func ParallelUnmarshalTo[T any, PT interface {
 			if chunkIdx == 0 {
 				r = r0
 			} else {
-				r = NewReader(bytes.NewReader(data[span.start:span.end]))
+				r = NewReader(bytes.NewReader(data[span.start:span.end]), csvOpts...)
 			}
 			defer r.Close()
 
-			c := countRecords(data[span.start:span.end])
+			c := countRecords(data[span.start:span.end], quoteByte)
 			if chunkIdx == 0 && c > 1 {
 				c--
 			}

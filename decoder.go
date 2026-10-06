@@ -10,6 +10,7 @@ import (
 // Decoder streams CSV records directly into Go structs.
 type Decoder struct {
 	r          *Reader
+	opts       []Option
 	headers    []string
 	headerRead bool
 	plan       *typePlan
@@ -18,10 +19,11 @@ type Decoder struct {
 }
 
 // NewDecoder creates a new streaming CSV decoder reading from r.
-func NewDecoder(r io.Reader) (*Decoder, error) {
-	reader := NewReader(r)
+func NewDecoder(r io.Reader, opts ...Option) (*Decoder, error) {
+	reader := NewReader(r, opts...)
 	return &Decoder{
 		r:       reader,
+		opts:    opts,
 		hasMore: true,
 	}, nil
 }
@@ -36,7 +38,7 @@ func (d *Decoder) Reset(r io.Reader) {
 	if d.r != nil {
 		d.r.Reset(r)
 	} else {
-		d.r = NewReader(r)
+		d.r = NewReader(r, d.opts...)
 	}
 	d.headers = nil
 	d.headerRead = false

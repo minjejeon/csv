@@ -11,7 +11,7 @@ import (
 
 // Unmarshal parses CSV-encoded data and stores the result in the slice pointed to by v.
 // v must be a pointer to a slice of structs or pointer to a slice of struct pointers.
-func Unmarshal(data []byte, v any) error {
+func Unmarshal(data []byte, v any, opts ...Option) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Pointer || val.IsNil() {
 		return fmt.Errorf("csv: Unmarshal expects a non-nil pointer, got %T", v)
@@ -35,7 +35,7 @@ func Unmarshal(data []byte, v any) error {
 		return fmt.Errorf("csv: slice elements must be structs or pointers to structs, got %v", elemType)
 	}
 
-	dec, err := NewDecoder(bytes.NewReader(data))
+	dec, err := NewDecoder(bytes.NewReader(data), opts...)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func Unmarshal(data []byte, v any) error {
 		return err
 	}
 
-	c := countRecords(data)
+	c := countRecords(data, dec.r.quoteByte)
 	if c > 1 {
 		c-- // exclude header
 	}

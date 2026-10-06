@@ -15,12 +15,35 @@ const DefaultParallelWorkers = 4
 
 // ParallelOptions configures multithreaded CSV execution.
 type ParallelOptions struct {
-	Workers int  // Number of worker goroutines (defaults to 4)
-	Ordered bool // If true (default), preserves original CSV row ordering
+	Workers int      // Number of worker goroutines (defaults to 4)
+	Ordered bool     // If true (default), preserves original CSV row ordering
+	Options []Option // CSV Reader options (delimiter, quote, etc.)
+}
+
+func parseParallelAndCsvOpts(opts []any) (ParallelOptions, []Option) {
+	parOpts := ParallelOptions{Ordered: true}
+	var csvOpts []Option
+	for _, opt := range opts {
+		switch o := opt.(type) {
+		case ParallelOptions:
+			parOpts = o
+			csvOpts = append(csvOpts, o.Options...)
+		case *ParallelOptions:
+			if o != nil {
+				parOpts = *o
+				csvOpts = append(csvOpts, o.Options...)
+			}
+		case Option:
+			csvOpts = append(csvOpts, o)
+		case []Option:
+			csvOpts = append(csvOpts, o...)
+		}
+	}
+	return parOpts, csvOpts
 }
 
 // ParallelUnmarshal parses CSV data concurrently across multiple worker goroutines.
-func ParallelUnmarshal(data []byte, v any, opts ...ParallelOptions) error {
+func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Pointer || val.IsNil() {
 		return fmt.Errorf("csv: ParallelUnmarshal expects a non-nil pointer, got %T", v)
@@ -44,22 +67,26 @@ func ParallelUnmarshal(data []byte, v any, opts ...ParallelOptions) error {
 		return fmt.Errorf("csv: slice elements must be structs or pointers to structs, got %v", elemType)
 	}
 
+	parOpts, csvOpts := parseParallelAndCsvOpts(opts)
 	numWorkers := DefaultParallelWorkers
-	if len(opts) > 0 && opts[0].Workers > 0 {
-		numWorkers = opts[0].Workers
+	if parOpts.Workers > 0 {
+		numWorkers = parOpts.Workers
 	}
 
-	chunks, err := splitChunks(data, numWorkers)
+	dummy := NewReader(nil, csvOpts...)
+	quoteByte := dummy.quoteByte
+
+	chunks, err := splitChunks(data, numWorkers, quoteByte)
 	if err != nil {
 		return err
 	}
 
 	if len(chunks) <= 1 {
-		return Unmarshal(data, v)
+		return Unmarshal(data, v, csvOpts...)
 	}
 
 	// 1. Worker 0 reads headers and compiles typePlan
-	r0 := NewReader(bytes.NewReader(data[chunks[0].start:chunks[0].end]))
+	r0 := NewReader(bytes.NewReader(data[chunks[0].start:chunks[0].end]), csvOpts...)
 	headers, err := r0.Read()
 	if err != nil {
 		r0.Close()
@@ -91,11 +118,11 @@ func ParallelUnmarshal(data []byte, v any, opts ...ParallelOptions) error {
 			if chunkIdx == 0 {
 				r = r0 // already past header
 			} else {
-				r = NewReader(bytes.NewReader(data[span.start:span.end]))
+				r = NewReader(bytes.NewReader(data[span.start:span.end]), csvOpts...)
 			}
 			defer r.Close()
 
-			c := countRecords(data[span.start:span.end])
+			c := countRecords(data[span.start:span.end], quoteByte)
 			if chunkIdx == 0 && c > 1 {
 				c--
 			}
