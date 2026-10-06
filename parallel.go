@@ -247,3 +247,191 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 	val.Elem().Set(finalSlice)
 	return nil
 }
+
+func parseParallelAndWriterOpts(opts []any) (ParallelOptions, []any) {
+	parOpts := ParallelOptions{Workers: DefaultParallelWorkers, Ordered: true}
+	var otherOpts []any
+	for _, opt := range opts {
+		switch o := opt.(type) {
+		case ParallelOptions:
+			parOpts = o
+			for _, co := range o.Options {
+				otherOpts = append(otherOpts, co)
+			}
+		case *ParallelOptions:
+			if o != nil {
+				parOpts = *o
+				for _, co := range o.Options {
+					otherOpts = append(otherOpts, co)
+				}
+			}
+		default:
+			otherOpts = append(otherOpts, opt)
+		}
+	}
+	if parOpts.Workers <= 0 {
+		parOpts.Workers = DefaultParallelWorkers
+	}
+	return parOpts, otherOpts
+}
+
+// ParallelMarshal encodes a slice of structs or pointers to structs concurrently across multiple workers.
+func ParallelMarshal(v any, opts ...any) ([]byte, error) {
+	val := reflect.ValueOf(v)
+	if !val.IsValid() {
+		return nil, errors.New("csv: ParallelMarshal(nil)")
+	}
+	if val.Kind() == reflect.Pointer {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
+		return nil, fmt.Errorf("csv: ParallelMarshal expects a slice or array, got %v", val.Kind())
+	}
+
+	elemType := val.Type().Elem()
+	isPtr := false
+	structType := elemType
+	if elemType.Kind() == reflect.Pointer {
+		isPtr = true
+		structType = elemType.Elem()
+	}
+
+	if structType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("csv: slice elements must be structs or pointers to structs, got %v", elemType)
+	}
+
+	n := val.Len()
+	if n == 0 {
+		return nil, nil
+	}
+
+	parOpts, otherOpts := parseParallelAndWriterOpts(opts)
+
+	// If single worker or very small dataset, use sequential Marshal
+	if parOpts.Workers <= 1 || n < parOpts.Workers {
+		return Marshal(v, opts...)
+	}
+
+	plan, err := getTypeMarshalPlan(structType)
+	if err != nil {
+		return nil, err
+	}
+
+	workers := parOpts.Workers
+	if workers > n {
+		workers = n
+	}
+	chunkSize := (n + workers - 1) / workers
+	numChunks := (n + chunkSize - 1) / chunkSize
+
+	type chunkOutput struct {
+		buf []byte
+		err error
+	}
+	outputs := make([]chunkOutput, numChunks)
+	var wg sync.WaitGroup
+	wg.Add(numChunks)
+
+	elemSize := structType.Size()
+	ptrSize := unsafe.Sizeof(uintptr(0))
+
+	var sliceBasePtr unsafe.Pointer
+	if val.Kind() == reflect.Slice {
+		sliceBasePtr = val.UnsafePointer()
+	} else {
+		if val.CanAddr() {
+			sliceBasePtr = val.Addr().UnsafePointer()
+		} else {
+			newVal := reflect.New(val.Type()).Elem()
+			newVal.Set(val)
+			sliceBasePtr = newVal.Addr().UnsafePointer()
+		}
+	}
+
+	for c := 0; c < numChunks; c++ {
+		start := c * chunkSize
+		end := start + chunkSize
+		if end > n {
+			end = n
+		}
+
+		go func(chunkIdx, startIdx, endIdx int) {
+			defer wg.Done()
+			var buf bytes.Buffer
+			buf.Grow((endIdx - startIdx) * 64)
+
+			w := NewWriter(&buf, otherOpts...)
+			defer w.Close()
+
+			if chunkIdx == 0 {
+				if err := w.Write(plan.headerRow); err != nil {
+					outputs[chunkIdx].err = err
+					return
+				}
+			}
+
+			for i := startIdx; i < endIdx; i++ {
+				var structPtr unsafe.Pointer
+				if isPtr {
+					structPtr = *(*unsafe.Pointer)(unsafe.Add(sliceBasePtr, uintptr(i)*ptrSize))
+					if structPtr == nil {
+						for j := range plan.fields {
+							if j > 0 {
+								w.WriteDelimiter()
+							}
+						}
+						if err := w.WriteNewline(); err != nil {
+							outputs[chunkIdx].err = err
+							return
+						}
+						continue
+					}
+				} else {
+					structPtr = unsafe.Add(sliceBasePtr, uintptr(i)*elemSize)
+				}
+
+				for j, f := range plan.fields {
+					if j > 0 {
+						w.WriteDelimiter()
+					}
+					if err := f.getter(structPtr, w); err != nil {
+						outputs[chunkIdx].err = fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
+						return
+					}
+				}
+				if err := w.WriteNewline(); err != nil {
+					outputs[chunkIdx].err = err
+					return
+				}
+			}
+
+			if err := w.Flush(); err != nil {
+				outputs[chunkIdx].err = err
+				return
+			}
+			outputs[chunkIdx].buf = buf.Bytes()
+		}(c, start, end)
+	}
+
+	wg.Wait()
+
+	for _, out := range outputs {
+		if out.err != nil {
+			return nil, out.err
+		}
+	}
+
+	totalLen := 0
+	for _, out := range outputs {
+		totalLen += len(out.buf)
+	}
+
+	result := make([]byte, totalLen)
+	dest := 0
+	for _, out := range outputs {
+		copy(result[dest:], out.buf)
+		dest += len(out.buf)
+	}
+	return result, nil
+}
+

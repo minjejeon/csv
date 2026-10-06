@@ -243,3 +243,154 @@ func ParallelUnmarshalTo[T any, PT interface {
 	*out = finalSlice
 	return nil
 }
+
+// RecordMarshaler is implemented by types that marshal themselves into a CSV record.
+type RecordMarshaler interface {
+	MarshalCSVRecord(w *Writer) error
+}
+
+// HeaderProvider is an optional interface implemented by types that declare their CSV column headers.
+type HeaderProvider interface {
+	CSVHeader() []string
+}
+
+// MarshalSlice encodes a slice of T into CSV bytes with zero reflection overhead.
+// T's pointer (*T) must implement RecordMarshaler.
+func MarshalSlice[T any, PT interface {
+	*T
+	RecordMarshaler
+}](slice []T, opts ...any) ([]byte, error) {
+	n := len(slice)
+	if n == 0 {
+		return nil, nil
+	}
+
+	var buf bytes.Buffer
+	buf.Grow(n * 64)
+	w := NewWriter(&buf, opts...)
+	defer w.Close()
+
+	var zero T
+	if hp, ok := any(PT(&zero)).(HeaderProvider); ok {
+		if err := w.Write(hp.CSVHeader()); err != nil {
+			return nil, err
+		}
+	}
+
+	for i := 0; i < n; i++ {
+		ptr := PT(&slice[i])
+		if err := ptr.MarshalCSVRecord(w); err != nil {
+			return nil, err
+		}
+		if err := w.WriteNewline(); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := w.Flush(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ParallelMarshalSlice encodes a slice of T concurrently across multiple workers with zero reflection overhead.
+// T's pointer (*T) must implement RecordMarshaler.
+func ParallelMarshalSlice[T any, PT interface {
+	*T
+	RecordMarshaler
+}](slice []T, opts ...any) ([]byte, error) {
+	n := len(slice)
+	if n == 0 {
+		return nil, nil
+	}
+
+	parOpts, otherOpts := parseParallelAndWriterOpts(opts)
+	if parOpts.Workers <= 1 || n < parOpts.Workers {
+		return MarshalSlice[T, PT](slice, opts...)
+	}
+
+	workers := parOpts.Workers
+	if workers > n {
+		workers = n
+	}
+	chunkSize := (n + workers - 1) / workers
+	numChunks := (n + chunkSize - 1) / chunkSize
+
+	type chunkOutput struct {
+		buf []byte
+		err error
+	}
+	outputs := make([]chunkOutput, numChunks)
+	var wg sync.WaitGroup
+	wg.Add(numChunks)
+
+	var zero T
+	var header []string
+	if hp, ok := any(PT(&zero)).(HeaderProvider); ok {
+		header = hp.CSVHeader()
+	}
+
+	for c := 0; c < numChunks; c++ {
+		start := c * chunkSize
+		end := start + chunkSize
+		if end > n {
+			end = n
+		}
+
+		go func(chunkIdx, startIdx, endIdx int) {
+			defer wg.Done()
+			var buf bytes.Buffer
+			buf.Grow((endIdx - startIdx) * 64)
+
+			w := NewWriter(&buf, otherOpts...)
+			defer w.Close()
+
+			if chunkIdx == 0 && len(header) > 0 {
+				if err := w.Write(header); err != nil {
+					outputs[chunkIdx].err = err
+					return
+				}
+			}
+
+			for i := startIdx; i < endIdx; i++ {
+				ptr := PT(&slice[i])
+				if err := ptr.MarshalCSVRecord(w); err != nil {
+					outputs[chunkIdx].err = err
+					return
+				}
+				if err := w.WriteNewline(); err != nil {
+					outputs[chunkIdx].err = err
+					return
+				}
+			}
+
+			if err := w.Flush(); err != nil {
+				outputs[chunkIdx].err = err
+				return
+			}
+			outputs[chunkIdx].buf = buf.Bytes()
+		}(c, start, end)
+	}
+
+	wg.Wait()
+
+	for _, out := range outputs {
+		if out.err != nil {
+			return nil, out.err
+		}
+	}
+
+	totalLen := 0
+	for _, out := range outputs {
+		totalLen += len(out.buf)
+	}
+
+	result := make([]byte, totalLen)
+	dest := 0
+	for _, out := range outputs {
+		copy(result[dest:], out.buf)
+		dest += len(out.buf)
+	}
+	return result, nil
+}
+

@@ -37,5 +37,5 @@
 | Serialization: Implementation Planning | Completed | docs/plans/2026-10-07-serialization.md |
 | Serialization Task 1: Streaming Zero-Alloc Writer with SIMD Quote Checking | Completed | writer.go, pool.go, writer_test.go |
 | Serialization Task 2: Struct Encoder & Marshal with Direct Unsafe Getters | Completed | getter.go, encoder.go, csv.go, marshal_test.go |
-| Serialization Task 3: Multithreaded ParallelMarshal & Generic RecordMarshaler API | In Progress | parallel.go, generic.go, parallel_marshal_test.go |
-| Serialization Task 4: Round-Trip, Regression & Benchmark Verification | Pending | marshal_bench_test.go, benchmarks |
+| Serialization Task 3: Multithreaded ParallelMarshal & Generic RecordMarshaler API | Completed | parallel.go, generic.go, parallel_marshal_test.go, generic_marshal_test.go |
+| Serialization Task 4: Round-Trip, Regression & Benchmark Verification | In Progress | marshal_bench_test.go, benchmarks |
