@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/minjejeon/csv.svg)](https://pkg.go.dev/github.com/minjejeon/csv)
 [![Go Report Card](https://goreportcard.com/badge/github.com/minjejeon/csv)](https://goreportcard.com/report/github.com/minjejeon/csv)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A high-performance, zero-allocation CSV reader and struct unmarshaler for Go.
 
@@ -255,4 +255,4 @@ When built without `GOEXPERIMENT=simd`, the package automatically falls back to 
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
