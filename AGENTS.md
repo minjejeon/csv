@@ -57,6 +57,7 @@ It combines:
 - Cache `*typePlan` keyed by `reflect.Type` in a thread-safe cache (`sync.Map`).
 - Use direct `unsafe.Pointer` offset writes for primitive types (`string`, `int*`, `uint*`, `float*`, `bool`) to achieve zero interface boxing and zero reflection in the hot loop.
 - Support `encoding.TextUnmarshaler` and custom unmarshaling interfaces.
+- `RecordUnmarshaler` interface: Compile-time zero-reflection generic unmarshaler (`UnmarshalSlice[T]`, `UnmarshalTo(data, &slice)`).
 
 ### 4. Test Compatibility
 - Must verify test cases ported from Go's standard `encoding/csv` (RFC 4180 compliance, quotes, CRLF/LF, comments, lazy quotes).

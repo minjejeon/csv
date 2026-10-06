@@ -1,5 +1,10 @@
 package csv
 
+import (
+	"strconv"
+	"unsafe"
+)
+
 // Record represents a single parsed CSV row with zero-copy field access.
 type Record struct {
 	r     *Reader
@@ -35,4 +40,58 @@ func (rec *Record) Field(i int) []byte {
 		return raw
 	}
 	return rec.r.unescape(raw)
+}
+
+// FieldString returns the unescaped string of field i.
+func (rec *Record) FieldString(i int) string {
+	b := rec.Field(i)
+	return string(b)
+}
+
+// FieldInt parses field i as an int.
+func (rec *Record) FieldInt(i int) (int, error) {
+	n, err := parseSignedInt(rec.Field(i))
+	return int(n), err
+}
+
+// FieldInt64 parses field i as an int64.
+func (rec *Record) FieldInt64(i int) (int64, error) {
+	return parseSignedInt(rec.Field(i))
+}
+
+// FieldUint parses field i as a uint.
+func (rec *Record) FieldUint(i int) (uint, error) {
+	n, err := parseUnsignedInt(rec.Field(i))
+	return uint(n), err
+}
+
+// FieldUint64 parses field i as a uint64.
+func (rec *Record) FieldUint64(i int) (uint64, error) {
+	return parseUnsignedInt(rec.Field(i))
+}
+
+// FieldBool parses field i as a boolean.
+func (rec *Record) FieldBool(i int) (bool, error) {
+	return parseBoolFast(rec.Field(i))
+}
+
+// FieldFloat64 parses field i as a float64.
+func (rec *Record) FieldFloat64(i int) (float64, error) {
+	b := rec.Field(i)
+	if len(b) == 0 {
+		return 0, nil
+	}
+	s := unsafe.String(unsafe.SliceData(b), len(b))
+	return strconv.ParseFloat(s, 64)
+}
+
+// FieldFloat32 parses field i as a float32.
+func (rec *Record) FieldFloat32(i int) (float32, error) {
+	b := rec.Field(i)
+	if len(b) == 0 {
+		return 0, nil
+	}
+	s := unsafe.String(unsafe.SliceData(b), len(b))
+	v, err := strconv.ParseFloat(s, 32)
+	return float32(v), err
 }
