@@ -26,6 +26,6 @@
 | SIMD Optimization: Implementation Planning | Completed | docs/plans/2026-10-07-simd-acceleration.md |
 | Task 1: Vectorized Architecture Scanner & Broadcast Register Cache | Completed | scan_simd_amd64.go, scan_simd_other.go, reader.go |
 | Task 2: DuckDB-Style No-Quote Fast-Path Block Scanner | Completed | scan_simd_amd64.go, reader.go |
-| Task 3: SIMD Vectorized Record & Chunk Counting | In Progress | csv.go, chunk.go |
-| Task 4: Fast SWAR ASCII Integer & Boolean Parsing in Struct Decoder | Pending | setter.go, decoder.go |
+| Task 3: SIMD Vectorized Record & Chunk Counting | Completed | csv.go, chunk.go |
+| Task 4: Fast SWAR ASCII Integer & Boolean Parsing in Struct Decoder | In Progress | setter.go, decoder.go |
 | Task 5: End-to-End Verification & Benchmarking | Pending | All tests & benchmarks |

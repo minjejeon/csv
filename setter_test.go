@@ -137,3 +137,30 @@ func TestSetterOverflowAndOmitEmpty(t *testing.T) {
 	}
 }
 
+func TestFastParseInteger(t *testing.T) {
+	tests := []struct {
+		in  string
+		exp int64
+	}{
+		{"0", 0},
+		{"5", 5},
+		{"42", 42},
+		{"123", 123},
+		{"1000", 1000},
+		{"50000", 50000},
+		{"12345678", 12345678},
+		{"987654321", 987654321},
+		{"-42", -42},
+		{"-1000", -1000},
+	}
+	for _, tt := range tests {
+		v, err := parseSignedInt([]byte(tt.in), 64)
+		if err != nil {
+			t.Fatalf("unexpected err for %q: %v", tt.in, err)
+		}
+		if v != tt.exp {
+			t.Fatalf("expected %d, got %d for %q", tt.exp, v, tt.in)
+		}
+	}
+}
+
