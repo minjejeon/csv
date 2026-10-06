@@ -21,6 +21,11 @@
 | SIMD Optimization: Context Exploration & Prior Art Research (Arrow, DuckDB, Polars) | Completed | Arrow/DuckDB/Polars comparative analysis |
 | SIMD Optimization: Clarifying Questions & User Direction Alignment | Completed | Full-pipeline combination approved by user |
 | SIMD Optimization: 2-3 Architectural Approaches Proposal | Completed | Approach 1 (Tiered Fast-Path & Full Pipeline SIMD) selected |
-| SIMD Optimization: Present Design Sections & User Approval | In Progress | Presenting design sections |
-| SIMD Optimization: Write Design Doc & Git Commit | Pending | docs/plans/2026-10-07-simd-acceleration-design.md |
-| SIMD Optimization: Implementation Planning | Pending | via writing-plans skill |
+| SIMD Optimization: Present Design Sections & User Approval | Completed | All sections reviewed & approved with profiling |
+| SIMD Optimization: Write Design Doc & Git Commit | Completed | docs/plans/2026-10-07-simd-acceleration-design.md |
+| SIMD Optimization: Implementation Planning | Completed | docs/plans/2026-10-07-simd-acceleration.md |
+| Task 1: Vectorized Architecture Scanner & Broadcast Register Cache | Pending | scan_simd.go, reader.go |
+| Task 2: DuckDB-Style No-Quote Fast-Path Block Scanner | Pending | scan_simd.go, scan_swar.go, reader.go |
+| Task 3: SIMD Vectorized Record & Chunk Counting | Pending | csv.go, chunk.go |
+| Task 4: Fast SWAR ASCII Integer & Boolean Parsing in Struct Decoder | Pending | setter.go, decoder.go |
+| Task 5: End-to-End Verification & Benchmarking | Pending | All tests & benchmarks |
