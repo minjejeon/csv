@@ -4,3 +4,4 @@
 | Task 2: Parallel Unmarshaler (ParallelUnmarshal) | Completed | parallel.go, parallel_test.go |
 | Task 3: Streaming ParallelReader Pipeline | Completed | parallel_reader.go, parallel_reader_test.go |
 | Task 4: Parallel Scalability Benchmarks | Completed | parallel_bench_test.go (256 MB/s, 2.5x speedup) |
+| Task 5: In-Place Slice Pre-Allocation Optimization | Completed | csv.go, parallel.go (1-thread: 94ms vs 166ms csvutil, 1.76x speedup) |
