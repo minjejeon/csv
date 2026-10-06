@@ -392,7 +392,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 			foundEnd := false
 
 			for !foundEnd {
-				specIdx := findNextSpecial(r.buf[r.pos:r.end], delim)
+				specIdx := findNextSpecial(r.buf[r.pos:r.end], delim, r.quoteByte)
 				if specIdx >= 0 {
 					targetPos := r.pos + specIdx
 					c := r.buf[targetPos]

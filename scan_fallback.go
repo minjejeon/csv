@@ -2,6 +2,6 @@
 
 package csv
 
-func findNextSpecial(data []byte, delim byte) int {
-	return findNextSpecialFallback(data, delim)
+func findNextSpecial(data []byte, delim byte, quote byte) int {
+	return findNextSpecialFallback(data, delim, quote)
 }

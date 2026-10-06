@@ -7,9 +7,9 @@ import (
 	"simd/archsimd"
 )
 
-func findNextSpecial(data []byte, delim byte) int {
+func findNextSpecial(data []byte, delim byte, quote byte) int {
 	if !archsimd.X86.AVX2() {
-		return findNextSpecialFallback(data, delim)
+		return findNextSpecialFallback(data, delim, quote)
 	}
 
 	n := len(data)
@@ -18,7 +18,7 @@ func findNextSpecial(data []byte, delim byte) int {
 	}
 
 	vDelim := archsimd.BroadcastUint8x32(delim)
-	vQuote := archsimd.BroadcastUint8x32('"')
+	vQuote := archsimd.BroadcastUint8x32(quote)
 	vCR := archsimd.BroadcastUint8x32('\r')
 	vLF := archsimd.BroadcastUint8x32('\n')
 
@@ -41,7 +41,7 @@ func findNextSpecial(data []byte, delim byte) int {
 
 	for ; i < n; i++ {
 		b := data[i]
-		if b == delim || b == '"' || b == '\r' || b == '\n' {
+		if b == delim || b == quote || b == '\r' || b == '\n' {
 			return i
 		}
 	}

@@ -7,7 +7,7 @@ import (
 
 // findNextSpecialFallback finds the index of the first occurrence of delim, '"', '\r', or '\n'
 // using 64-bit SWAR (SIMD Within A Register) operations.
-func findNextSpecialFallback(data []byte, delim byte) int {
+func findNextSpecialFallback(data []byte, delim byte, quote byte) int {
 	n := len(data)
 	i := 0
 
@@ -16,7 +16,7 @@ func findNextSpecialFallback(data []byte, delim byte) int {
 		repeat80 = 0x8080808080808080
 	)
 	maskDelim := uint64(delim) * repeat01
-	maskQuote := uint64('"') * repeat01
+	maskQuote := uint64(quote) * repeat01
 	maskCR := uint64('\r') * repeat01
 	maskLF := uint64('\n') * repeat01
 
@@ -42,13 +42,13 @@ func findNextSpecialFallback(data []byte, delim byte) int {
 			// Verify in case of non-ASCII byte borrow edge-case
 			for idx := i; idx <= i+tz && idx < n; idx++ {
 				b := data[idx]
-				if b == delim || b == '"' || b == '\r' || b == '\n' {
+				if b == delim || b == quote || b == '\r' || b == '\n' {
 					return idx
 				}
 			}
 			for idx := i + tz + 1; idx < i+8 && idx < n; idx++ {
 				b := data[idx]
-				if b == delim || b == '"' || b == '\r' || b == '\n' {
+				if b == delim || b == quote || b == '\r' || b == '\n' {
 					return idx
 				}
 			}
@@ -58,7 +58,7 @@ func findNextSpecialFallback(data []byte, delim byte) int {
 
 	for ; i < n; i++ {
 		b := data[i]
-		if b == delim || b == '"' || b == '\r' || b == '\n' {
+		if b == delim || b == quote || b == '\r' || b == '\n' {
 			return i
 		}
 	}
