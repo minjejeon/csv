@@ -110,6 +110,28 @@ func ParallelUnmarshalTo[T any, PT interface {
 	}
 
 	dummy := NewReader(nil, csvOpts...)
+	if dummy.initErr != nil {
+		return dummy.initErr
+	}
+	if dummy.encoding != nil {
+		utf8Data, err := dummy.encoding.NewDecoder().Bytes(data)
+		if err != nil {
+			return err
+		}
+		data = utf8Data
+		var filteredOpts []any
+		if parOpts.Workers > 0 {
+			filteredOpts = append(filteredOpts, parOpts)
+		}
+		for _, opt := range csvOpts {
+			d := &Reader{}
+			opt(d)
+			if d.encoding == nil {
+				filteredOpts = append(filteredOpts, opt)
+			}
+		}
+		return ParallelUnmarshalTo[T, PT](data, out, filteredOpts...)
+	}
 	quoteByte := dummy.quoteByte
 
 	chunks, err := splitChunks(data, numWorkers, quoteByte)

@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/transform"
 )
 
 var (
@@ -40,6 +43,8 @@ type Reader struct {
 	delimBytes   []byte
 	quoteByte    byte
 	isMultiDelim bool
+	encoding     encoding.Encoding
+	initErr      error
 
 	r   io.Reader
 	buf []byte
@@ -103,6 +108,9 @@ func NewReader(r io.Reader, opts ...Option) *Reader {
 	for _, opt := range opts {
 		opt(reader)
 	}
+	if reader.encoding != nil && reader.r != nil {
+		reader.r = transform.NewReader(reader.r, reader.encoding.NewDecoder())
+	}
 	reader.initDelimAndQuote()
 	reader.record.r = reader
 	reader.record.spans = sHolder.spans[:0]
@@ -111,6 +119,9 @@ func NewReader(r io.Reader, opts ...Option) *Reader {
 
 // Reset resets the Reader to read from r, reusing allocated buffers.
 func (r *Reader) Reset(rd io.Reader) {
+	if r.encoding != nil && rd != nil {
+		rd = transform.NewReader(rd, r.encoding.NewDecoder())
+	}
 	r.r = rd
 	r.pos = 0
 	r.end = 0
@@ -205,6 +216,9 @@ func (r *Reader) ensureMore() (int, error) {
 
 // ReadRecord reads one record and returns a zero-copy Record referencing the internal buffer.
 func (r *Reader) ReadRecord() (*Record, error) {
+	if r.initErr != nil {
+		return nil, r.initErr
+	}
 	if r.delimBytes == nil ||
 		(len(r.delimBytes) == 1 && r.Comma != 0 && rune(r.delimBytes[0]) != r.Comma) ||
 		(r.Delimiter != "" && string(r.delimBytes) != r.Delimiter) ||
@@ -631,3 +645,19 @@ func (r *Reader) Read() ([]string, error) {
 	}
 	return res, nil
 }
+
+// ReadAll reads all the remaining records from r.
+func (r *Reader) ReadAll() ([][]string, error) {
+	var records [][]string
+	for {
+		record, err := r.Read()
+		if err == io.EOF {
+			return records, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+}
+
