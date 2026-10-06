@@ -32,6 +32,10 @@
 | Serialization: Explore Context & Prior Art | Completed | Arrow/DuckDB/csvutil serialization techniques |
 | Serialization: Clarifying Questions & User Alignment | Completed | Full-stack serialization engine approved by user |
 | Serialization: 2-3 Architectural Approaches Proposal | Completed | Approach 1 (Integrated Zero-Alloc Pipeline) selected |
-| Serialization: Present Design Sections & Approval | In Progress | Presenting design sections |
-| Serialization: Write Design Doc & Git Commit | Pending | docs/plans/2026-10-07-serialization-design.md |
-| Serialization: Implementation Planning | Pending | docs/plans/2026-10-07-serialization.md |
+| Serialization: Present Design Sections & Approval | Completed | All sections approved |
+| Serialization: Write Design Doc & Git Commit | Completed | docs/plans/2026-10-07-serialization-design.md |
+| Serialization: Implementation Planning | Completed | docs/plans/2026-10-07-serialization.md |
+| Serialization Task 1: Streaming Zero-Alloc Writer with SIMD Quote Checking | Pending | writer.go, pool.go, writer_test.go |
+| Serialization Task 2: Struct Encoder & Marshal with Direct Unsafe Getters | Pending | getter.go, encoder.go, csv.go, marshal_test.go |
+| Serialization Task 3: Multithreaded ParallelMarshal & Generic RecordMarshaler API | Pending | parallel.go, generic.go, parallel_marshal_test.go |
+| Serialization Task 4: Round-Trip, Regression & Benchmark Verification | Pending | marshal_bench_test.go, benchmarks |
