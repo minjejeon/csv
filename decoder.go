@@ -33,12 +33,26 @@ func (d *Decoder) Header() []string {
 
 // Reset resets the Decoder to read from r, reusing internal buffers.
 func (d *Decoder) Reset(r io.Reader) {
-	d.r.Reset(r)
+	if d.r != nil {
+		d.r.Reset(r)
+	} else {
+		d.r = NewReader(r)
+	}
 	d.headers = nil
 	d.headerRead = false
 	d.plan = nil
 	d.targetType = nil
 	d.hasMore = true
+}
+
+// Close releases the Decoder's pooled buffers back to their respective pools.
+func (d *Decoder) Close() error {
+	if d.r != nil {
+		err := d.r.Close()
+		d.r = nil
+		return err
+	}
+	return nil
 }
 
 func (d *Decoder) readHeaders() error {
@@ -49,6 +63,7 @@ func (d *Decoder) readHeaders() error {
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			d.hasMore = false
+			_ = d.Close()
 		}
 		return err
 	}
@@ -64,7 +79,7 @@ func (d *Decoder) More() bool {
 
 // Decode decodes the next CSV record into the struct pointed to by v.
 func (d *Decoder) Decode(v any) error {
-	if !d.hasMore {
+	if !d.hasMore || d.r == nil {
 		return io.EOF
 	}
 
@@ -98,6 +113,7 @@ func (d *Decoder) Decode(v any) error {
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			d.hasMore = false
+			_ = d.Close()
 		}
 		return err
 	}

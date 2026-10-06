@@ -50,24 +50,40 @@ func (rec *Record) FieldString(i int) string {
 
 // FieldInt parses field i as an int.
 func (rec *Record) FieldInt(i int) (int, error) {
-	n, err := parseSignedInt(rec.Field(i))
+	b := rec.Field(i)
+	if len(b) == 0 {
+		return 0, nil
+	}
+	n, err := parseSignedInt(b, strconv.IntSize)
 	return int(n), err
 }
 
 // FieldInt64 parses field i as an int64.
 func (rec *Record) FieldInt64(i int) (int64, error) {
-	return parseSignedInt(rec.Field(i))
+	b := rec.Field(i)
+	if len(b) == 0 {
+		return 0, nil
+	}
+	return parseSignedInt(b, 64)
 }
 
 // FieldUint parses field i as a uint.
 func (rec *Record) FieldUint(i int) (uint, error) {
-	n, err := parseUnsignedInt(rec.Field(i))
+	b := rec.Field(i)
+	if len(b) == 0 {
+		return 0, nil
+	}
+	n, err := parseUnsignedInt(b, strconv.IntSize)
 	return uint(n), err
 }
 
 // FieldUint64 parses field i as a uint64.
 func (rec *Record) FieldUint64(i int) (uint64, error) {
-	return parseUnsignedInt(rec.Field(i))
+	b := rec.Field(i)
+	if len(b) == 0 {
+		return 0, nil
+	}
+	return parseUnsignedInt(b, 64)
 }
 
 // FieldBool parses field i as a boolean.

@@ -84,6 +84,8 @@ func (r *Reader) Reset(rd io.Reader) {
 	r.eof = false
 	r.line = 1
 	r.numFieldsFirst = 0
+	r.recordStart = 0
+	r.currFieldStart = 0
 	if r.spanHolder != nil {
 		r.record.spans = r.spanHolder.spans[:0]
 	}
@@ -121,14 +123,16 @@ func (r *Reader) unescape(b []byte) []byte {
 }
 
 // ensureMore reads more data from r.r into r.buf when r.pos >= r.end.
-func (r *Reader) ensureMore() error {
+// It returns the number of bytes the buffer was shifted (if any), and any read error.
+func (r *Reader) ensureMore() (int, error) {
 	if r.eof {
-		return nil
+		return 0, nil
 	}
 
+	shift := 0
 	if r.end == len(r.buf) || (r.recordStart > 0 && r.recordStart > len(r.buf)/2) {
 		if r.recordStart > 0 {
-			shift := r.recordStart
+			shift = r.recordStart
 			n := copy(r.buf, r.buf[shift:r.end])
 			r.pos -= shift
 			r.end = n
@@ -158,11 +162,11 @@ func (r *Reader) ensureMore() error {
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			r.eof = true
-			return nil
+			return shift, nil
 		}
-		return err
+		return shift, err
 	}
-	return nil
+	return shift, nil
 }
 
 // ReadRecord reads one record and returns a zero-copy Record referencing the internal buffer.
@@ -177,7 +181,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	// 1. Skip leading comments and blank lines
 	for {
 		for r.pos >= r.end && !r.eof {
-			if err := r.ensureMore(); err != nil {
+			if _, err := r.ensureMore(); err != nil {
 				return nil, err
 			}
 		}
@@ -189,7 +193,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		if r.buf[r.pos] == '\r' {
 			r.pos++
 			if r.pos >= r.end && !r.eof {
-				if err := r.ensureMore(); err != nil {
+				if _, err := r.ensureMore(); err != nil {
 					return nil, err
 				}
 			}
@@ -218,7 +222,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 					r.pos = r.end
 					break
 				}
-				if err := r.ensureMore(); err != nil {
+				if _, err := r.ensureMore(); err != nil {
 					return nil, err
 				}
 			}
@@ -233,7 +237,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	// 2. Parse fields
 	for {
 		for r.pos >= r.end && !r.eof {
-			if err := r.ensureMore(); err != nil {
+			if _, err := r.ensureMore(); err != nil {
 				return nil, err
 			}
 		}
@@ -254,7 +258,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 				r.pos++
 			}
 			for r.pos >= r.end && !r.eof {
-				if err := r.ensureMore(); err != nil {
+				if _, err := r.ensureMore(); err != nil {
 					return nil, err
 				}
 				for r.pos < r.end && (r.buf[r.pos] == ' ' || r.buf[r.pos] == '\t') {
@@ -274,9 +278,11 @@ func (r *Reader) ReadRecord() (*Record, error) {
 				if idx >= 0 {
 					quotePos := r.pos + idx
 					if quotePos+1 >= r.end && !r.eof {
-						if err := r.ensureMore(); err != nil {
+						shift, err := r.ensureMore()
+						if err != nil {
 							return nil, err
 						}
+						quotePos -= shift
 					}
 
 					var fieldEnd int
@@ -285,9 +291,9 @@ func (r *Reader) ReadRecord() (*Record, error) {
 						hasEscapes = true
 						r.pos = quotePos + 2
 						continue
-					} else if (quotePos+1 < r.end && (r.buf[quotePos+1] == delim || r.buf[quotePos+1] == '\r' || r.buf[quotePos+1] == '\n')) ||
+					} else if (quotePos+1 < r.end && (r.buf[quotePos+1] == delim || r.buf[quotePos+1] == '\r' || r.buf[quotePos+1] == '\n' || r.buf[quotePos+1] == ' ' || r.buf[quotePos+1] == '\t')) ||
 						(quotePos+1 >= r.end && r.eof) {
-						// Valid closing quote followed by delimiter, newline, or EOF
+						// Valid closing quote followed by delimiter, newline, whitespace, or EOF
 						fieldEnd = quotePos
 						r.pos = quotePos + 1
 					} else if r.LazyQuotes {
@@ -301,9 +307,11 @@ func (r *Reader) ReadRecord() (*Record, error) {
 					// Scan until delimiter, newline, or EOF
 					for {
 						if r.pos >= r.end && !r.eof {
-							if err := r.ensureMore(); err != nil {
+							shift, err := r.ensureMore()
+							if err != nil {
 								return nil, err
 							}
+							fieldEnd -= shift
 						}
 						if r.pos >= r.end && r.eof {
 							break
@@ -341,7 +349,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 				}
 
 				r.pos = r.end
-				if err := r.ensureMore(); err != nil {
+				if _, err := r.ensureMore(); err != nil {
 					return nil, err
 				}
 			}
@@ -369,9 +377,11 @@ func (r *Reader) ReadRecord() (*Record, error) {
 					} else if c == '\r' {
 						// Check if followed by \n
 						if targetPos+1 >= r.end && !r.eof {
-							if err := r.ensureMore(); err != nil {
+							shift, err := r.ensureMore()
+							if err != nil {
 								return nil, err
 							}
+							targetPos -= shift
 						}
 						if targetPos+1 < r.end && r.buf[targetPos+1] == '\n' {
 							// CRLF is end of line
@@ -422,7 +432,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 				}
 
 				r.pos = r.end
-				if err := r.ensureMore(); err != nil {
+				if _, err := r.ensureMore(); err != nil {
 					return nil, err
 				}
 			}
@@ -447,7 +457,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 			if r.buf[r.pos] == '\r' {
 				r.pos++
 				if r.pos >= r.end && !r.eof {
-					if err := r.ensureMore(); err != nil {
+					if _, err := r.ensureMore(); err != nil {
 						return nil, err
 					}
 				}

@@ -150,9 +150,17 @@ func (pr *ParallelReader) ReadBatch() ([][]string, error) {
 	} else {
 		item, ok := <-pr.outCh
 		if !ok {
+			pr.eofReached = true
+			if pr.err != nil {
+				return nil, pr.err
+			}
 			return nil, io.EOF
 		}
+		if item.Err != nil && !errors.Is(item.Err, io.EOF) {
+			pr.err = item.Err
+		}
 		if len(item.Rows) == 0 && item.Err != nil {
+			pr.eofReached = true
 			return nil, item.Err
 		}
 		return item.Rows, nil

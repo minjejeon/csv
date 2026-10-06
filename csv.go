@@ -39,11 +39,12 @@ func Unmarshal(data []byte, v any) error {
 	if err != nil {
 		return err
 	}
-	defer dec.r.Close()
+	defer dec.Close()
 
 	if err := dec.readHeaders(); err != nil {
 		if errors.Is(err, io.EOF) {
 			// Empty input produces empty slice
+			val.Elem().Set(reflect.MakeSlice(sliceVal.Type(), 0, 0))
 			return nil
 		}
 		return err
@@ -147,11 +148,21 @@ func countRecords(s []byte) int {
 			if !inQuote {
 				n++
 			}
+			s = s[i+1:]
 		case '"':
-			inQuote = !inQuote
+			if !inQuote {
+				inQuote = true
+				s = s[i+1:]
+			} else {
+				if len(s) > i+1 && s[i+1] == '"' {
+					// Escaped quote "" inside quoted field
+					s = s[i+2:]
+					continue
+				}
+				inQuote = false
+				s = s[i+1:]
+			}
 		}
-
-		s = s[i+1:]
 	}
 	return n
 }

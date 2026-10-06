@@ -99,3 +99,36 @@ func TestSplitChunksEdgeCases(t *testing.T) {
 		t.Fatalf("expected 1-2 chunks for tiny data, got %d", len(chunks))
 	}
 }
+
+func TestSplitChunksWithEscapedAndEmptyQuotes(t *testing.T) {
+	var buf bytes.Buffer
+	buf.WriteString("id,desc,val\n")
+	for i := 0; i < 200; i++ {
+		// Include empty quotes and escaped quotes
+		fmt.Fprintf(&buf, "%d,\"\"\"escaped_quote_\"\"_value\",%d\n", i, i)
+		fmt.Fprintf(&buf, "%d,\"\",%d\n", i+1000, i)
+		fmt.Fprintf(&buf, "%d,\"multiline\n\"\"with_quotes\"\"\nline\",%d\n", i+2000, i)
+	}
+	data := buf.Bytes()
+
+	chunks, err := splitChunks(data, 4)
+	if err != nil {
+		t.Fatalf("splitChunks failed: %v", err)
+	}
+
+	for i := 1; i < len(chunks); i++ {
+		start := chunks[i].start
+		if data[start-1] != '\n' {
+			t.Fatalf("chunk %d does not start after newline", i)
+		}
+		r := NewReader(bytes.NewReader(data[start:chunks[i].end]))
+		rec, err := r.Read()
+		if err != nil {
+			t.Fatalf("chunk %d first record parse failed: %v", i, err)
+		}
+		if len(rec) != 3 {
+			t.Fatalf("chunk %d expected 3 fields, got %d: %v", i, len(rec), rec)
+		}
+	}
+}
+

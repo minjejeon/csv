@@ -118,3 +118,50 @@ func TestDecoderZeroAllocRow(t *testing.T) {
 		t.Fatalf("expected <= 1 alloc/row (1000 for string creation), got %f", allocs)
 	}
 }
+
+func TestDecoderCloseAndReset(t *testing.T) {
+	csvData := "a,b\n1,2\n"
+	dec, err := NewDecoder(strings.NewReader(csvData))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var row struct {
+		A int `csv:"a"`
+		B int `csv:"b"`
+	}
+
+	if err := dec.Decode(&row); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if row.A != 1 || row.B != 2 {
+		t.Fatalf("unexpected row: %+v", row)
+	}
+
+	// Reading past end returns EOF and auto-closes
+	err = dec.Decode(&row)
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected EOF, got %v", err)
+	}
+
+	// Double Close is idempotent
+	if err := dec.Close(); err != nil {
+		t.Fatalf("unexpected close error: %v", err)
+	}
+	if err := dec.Close(); err != nil {
+		t.Fatalf("unexpected close error on second close: %v", err)
+	}
+
+	// Reset after Close re-acquires reader and works
+	dec.Reset(strings.NewReader("a,b\n10,20\n"))
+	if err := dec.Decode(&row); err != nil {
+		t.Fatalf("decode after reset failed: %v", err)
+	}
+	if row.A != 10 || row.B != 20 {
+		t.Fatalf("unexpected row after reset: %+v", row)
+	}
+	if err := dec.Close(); err != nil {
+		t.Fatalf("close failed: %v", err)
+	}
+}
+

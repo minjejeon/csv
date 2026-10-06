@@ -14,9 +14,9 @@ var (
 	timeType            = reflect.TypeOf(time.Time{})
 )
 
-func parseSignedInt(b []byte) (int64, error) {
+func parseSignedInt(b []byte, bitSize int) (int64, error) {
 	if len(b) == 0 {
-		return 0, nil
+		return 0, strconv.ErrSyntax
 	}
 	neg := false
 	if b[0] == '-' {
@@ -29,12 +29,25 @@ func parseSignedInt(b []byte) (int64, error) {
 		return 0, strconv.ErrSyntax
 	}
 
+	var maxVal uint64
+	if neg {
+		maxVal = 1 << (bitSize - 1)
+	} else {
+		maxVal = (1 << (bitSize - 1)) - 1
+	}
+	cutoff := maxVal / 10
+	maxDigit := maxVal % 10
+
 	var n uint64
 	for _, c := range b {
 		if c < '0' || c > '9' {
 			return 0, strconv.ErrSyntax
 		}
-		n = n*10 + uint64(c-'0')
+		d := uint64(c - '0')
+		if n > cutoff || (n == cutoff && d > maxDigit) {
+			return 0, strconv.ErrRange
+		}
+		n = n*10 + d
 	}
 
 	if neg {
@@ -43,9 +56,9 @@ func parseSignedInt(b []byte) (int64, error) {
 	return int64(n), nil
 }
 
-func parseUnsignedInt(b []byte) (uint64, error) {
+func parseUnsignedInt(b []byte, bitSize int) (uint64, error) {
 	if len(b) == 0 {
-		return 0, nil
+		return 0, strconv.ErrSyntax
 	}
 	if b[0] == '+' {
 		b = b[1:]
@@ -54,12 +67,25 @@ func parseUnsignedInt(b []byte) (uint64, error) {
 		return 0, strconv.ErrSyntax
 	}
 
+	var maxVal uint64
+	if bitSize == 64 {
+		maxVal = ^uint64(0)
+	} else {
+		maxVal = (uint64(1) << bitSize) - 1
+	}
+	cutoff := maxVal / 10
+	maxDigit := maxVal % 10
+
 	var n uint64
 	for _, c := range b {
 		if c < '0' || c > '9' {
 			return 0, strconv.ErrSyntax
 		}
-		n = n*10 + uint64(c-'0')
+		d := uint64(c - '0')
+		if n > cutoff || (n == cutoff && d > maxDigit) {
+			return 0, strconv.ErrRange
+		}
+		n = n*10 + d
 	}
 	return n, nil
 }
@@ -142,11 +168,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Int:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*int)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*int)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseSignedInt(raw)
+			v, err := parseSignedInt(raw, strconv.IntSize)
 			if err != nil {
 				return err
 			}
@@ -156,11 +185,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Int8:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*int8)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*int8)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseSignedInt(raw)
+			v, err := parseSignedInt(raw, 8)
 			if err != nil {
 				return err
 			}
@@ -170,11 +202,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Int16:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*int16)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*int16)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseSignedInt(raw)
+			v, err := parseSignedInt(raw, 16)
 			if err != nil {
 				return err
 			}
@@ -184,11 +219,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Int32:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*int32)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*int32)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseSignedInt(raw)
+			v, err := parseSignedInt(raw, 32)
 			if err != nil {
 				return err
 			}
@@ -198,11 +236,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Int64:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*int64)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*int64)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseSignedInt(raw)
+			v, err := parseSignedInt(raw, 64)
 			if err != nil {
 				return err
 			}
@@ -212,11 +253,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Uint:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*uint)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*uint)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseUnsignedInt(raw)
+			v, err := parseUnsignedInt(raw, strconv.IntSize)
 			if err != nil {
 				return err
 			}
@@ -226,11 +270,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Uint8:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*uint8)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*uint8)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseUnsignedInt(raw)
+			v, err := parseUnsignedInt(raw, 8)
 			if err != nil {
 				return err
 			}
@@ -240,11 +287,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Uint16:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*uint16)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*uint16)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseUnsignedInt(raw)
+			v, err := parseUnsignedInt(raw, 16)
 			if err != nil {
 				return err
 			}
@@ -254,11 +304,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Uint32:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*uint32)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*uint32)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseUnsignedInt(raw)
+			v, err := parseUnsignedInt(raw, 32)
 			if err != nil {
 				return err
 			}
@@ -268,11 +321,14 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 
 	case reflect.Uint64:
 		return func(structPtr unsafe.Pointer, raw []byte) error {
-			if len(raw) == 0 && tag.omitEmpty {
-				*(*uint64)(unsafe.Add(structPtr, offset)) = 0
-				return nil
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*uint64)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
 			}
-			v, err := parseUnsignedInt(raw)
+			v, err := parseUnsignedInt(raw, 64)
 			if err != nil {
 				return err
 			}

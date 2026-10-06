@@ -59,3 +59,27 @@ func TestParallelReaderClose(t *testing.T) {
 		t.Fatalf("Close failed: %v", err)
 	}
 }
+
+func TestParallelReaderUnorderedError(t *testing.T) {
+	// CSV with syntax error
+	data := []byte("col1,col2\n\"unclosed,row\n")
+	pr, err := NewParallelReader(bytes.NewReader(data), ParallelOptions{Workers: 2, Ordered: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+
+	var gotErr error
+	for {
+		_, err := pr.ReadBatch()
+		if err != nil {
+			gotErr = err
+			break
+		}
+	}
+
+	if gotErr == nil || errors.Is(gotErr, io.EOF) {
+		t.Fatalf("expected error on malformed CSV in unordered mode, got: %v", gotErr)
+	}
+}
+

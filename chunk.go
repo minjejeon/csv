@@ -41,13 +41,18 @@ func splitChunks(data []byte, numWorkers int) ([]chunkSpan, error) {
 		c := data[matchPos]
 
 		if c == '"' {
-			// Check for escaped quote ""
-			if matchPos+1 < n && data[matchPos+1] == '"' {
-				currentPos = matchPos + 2
-				continue
+			if !inQuote {
+				inQuote = true
+				currentPos = matchPos + 1
+			} else {
+				// Check for escaped quote "" inside quoted field
+				if matchPos+1 < n && data[matchPos+1] == '"' {
+					currentPos = matchPos + 2
+					continue
+				}
+				inQuote = false
+				currentPos = matchPos + 1
 			}
-			inQuote = !inQuote
-			currentPos = matchPos + 1
 		} else if c == '\n' {
 			currentPos = matchPos + 1
 			if !inQuote {
