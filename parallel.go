@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"runtime"
 	"sync"
 )
 
+// DefaultParallelWorkers is the default number of worker goroutines for parallel parsing.
+const DefaultParallelWorkers = 4
+
 // ParallelOptions configures multithreaded CSV execution.
 type ParallelOptions struct {
-	Workers int  // Number of worker goroutines (defaults to runtime.GOMAXPROCS(0))
+	Workers int  // Number of worker goroutines (defaults to 4)
 	Ordered bool // If true (default), preserves original CSV row ordering
 }
 
@@ -41,7 +43,7 @@ func ParallelUnmarshal(data []byte, v any, opts ...ParallelOptions) error {
 		return fmt.Errorf("csv: slice elements must be structs or pointers to structs, got %v", elemType)
 	}
 
-	numWorkers := runtime.GOMAXPROCS(0)
+	numWorkers := DefaultParallelWorkers
 	if len(opts) > 0 && opts[0].Workers > 0 {
 		numWorkers = opts[0].Workers
 	}

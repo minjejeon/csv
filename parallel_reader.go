@@ -3,7 +3,6 @@ package csv
 import (
 	"errors"
 	"io"
-	"runtime"
 	"sync"
 )
 
@@ -30,7 +29,7 @@ type ParallelReader struct {
 
 // NewParallelReader starts streaming records from r using worker goroutines.
 func NewParallelReader(r io.Reader, opts ...ParallelOptions) (*ParallelReader, error) {
-	numWorkers := runtime.GOMAXPROCS(0)
+	numWorkers := DefaultParallelWorkers
 	ordered := true
 	if len(opts) > 0 {
 		if opts[0].Workers > 0 {

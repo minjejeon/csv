@@ -80,3 +80,20 @@ func TestParallelUnmarshalSmall(t *testing.T) {
 		t.Errorf("unexpected users: %+v", users)
 	}
 }
+
+func TestParallelUnmarshalDefaultWorkers(t *testing.T) {
+	data := makeLargeCSV(1000)
+
+	var users []ParallelUser
+	// No options passed -> should use DefaultParallelWorkers = 4
+	if err := ParallelUnmarshal(data, &users); err != nil {
+		t.Fatalf("ParallelUnmarshal with default workers failed: %v", err)
+	}
+
+	if len(users) != 1000 {
+		t.Fatalf("expected 1000 users, got %d", len(users))
+	}
+	if DefaultParallelWorkers != 4 {
+		t.Fatalf("expected DefaultParallelWorkers to be 4, got %d", DefaultParallelWorkers)
+	}
+}
