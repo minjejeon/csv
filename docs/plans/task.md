@@ -17,4 +17,4 @@
 | Task 8: Custom Encoding Engine (EUC-KR, Shift_JIS, CP949) | Completed | encoding.go, encoding_test.go, option.go, reader.go |
 | Task 9: AGENTS.md English Language Rule & Path Config | Completed | AGENTS.md |
 | Task 10: Comprehensive English README.md | Completed | README.md |
-| Task 11: End-to-End Verification, Tag v0.3.0 & Push | Pending | git commit, tag v0.3.0, push to GitHub |
+| Task 11: End-to-End Verification, Tag v0.3.0 & Push | Completed | git commit, tag v0.3.0, push to GitHub |
