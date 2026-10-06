@@ -230,5 +230,24 @@ func TestReaderCustomQuoteAndMultiDelim(t *testing.T) {
 	}
 }
 
+func TestReaderNoQuoteFastPath(t *testing.T) {
+	data := "a,b,c,d\n1,2,3,4\n5,6,7,8\n"
+	r := NewReader(strings.NewReader(data))
+	rec, err := r.ReadRecord()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.NumFields() != 4 || string(rec.Field(0)) != "a" {
+		t.Fatalf("unexpected record: %v", rec)
+	}
+	rec2, err := r.ReadRecord()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec2.NumFields() != 4 || string(rec2.Field(0)) != "1" || string(rec2.Field(3)) != "4" {
+		t.Fatalf("unexpected record 2: %v", rec2)
+	}
+}
+
 
 

@@ -68,9 +68,8 @@ func (s *blockScanner) scanBlock32(chunk []byte) (maskDelim, maskQuote, maskEOL 
 	v := archsimd.LoadUint8x32(chunk[:32])
 	mD := v.Equal(s.vDelim)
 	mQ := v.Equal(s.vQuote)
-	mCR := v.Equal(s.vCR)
-	mLF := v.Equal(s.vLF)
-	return mD.ToBits(), mQ.ToBits(), mCR.ToBits() | mLF.ToBits()
+	mEOL := v.Equal(s.vCR).Or(v.Equal(s.vLF))
+	return mD.ToBits(), mQ.ToBits(), mEOL.ToBits()
 }
 
 func findNextSpecial(data []byte, delim byte, quote byte) int {

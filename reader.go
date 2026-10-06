@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/transform"
@@ -313,7 +314,19 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	r.recordStart = r.pos
 	recordLine := r.line
 
-	// 2. Parse fields
+	// DuckDB-style vectorized no-quote fast path
+	if !r.isMultiDelim && !r.TrimLeadingSpace && !r.LazyQuotes {
+		for r.end-r.pos < 32 && !r.eof {
+			if _, err := r.ensureMore(); err != nil {
+				return nil, err
+			}
+		}
+		if rec, ok, err := r.readRecordFastNoQuote(recordLine); ok || err != nil {
+			return rec, err
+		}
+	}
+
+	// 2. Parse fields (RFC 4180 / quoted fallback)
 	for {
 		for r.pos >= r.end && !r.eof {
 			if _, err := r.ensureMore(); err != nil {
@@ -685,6 +698,110 @@ func (r *Reader) ReadAll() ([][]string, error) {
 			return nil, err
 		}
 		records = append(records, record)
+	}
+}
+
+func (r *Reader) readRecordFastNoQuote(recordLine int) (*Record, bool, error) {
+	if r.pos >= r.end {
+		return nil, false, nil
+	}
+
+	startPos := r.pos
+	currStart := r.pos
+
+	for {
+		if r.pos+32 > r.end {
+			r.pos = startPos
+			r.record.spans = r.record.spans[:0]
+			return nil, false, nil
+		}
+
+		mDelim, mQuote, mEOL := r.scanner.scanBlock32(r.buf[r.pos : r.pos+32])
+		if mQuote != 0 {
+			r.pos = startPos
+			r.record.spans = r.record.spans[:0]
+			return nil, false, nil
+		}
+
+		if mEOL != 0 {
+			eolOffset := bits.TrailingZeros32(mEOL)
+			b := r.buf[r.pos+eolOffset]
+			var nextRecordPos int
+			if b == '\n' {
+				nextRecordPos = r.pos + eolOffset + 1
+			} else if b == '\r' {
+				if eolOffset+1 < 32 {
+					if r.buf[r.pos+eolOffset+1] == '\n' {
+						nextRecordPos = r.pos + eolOffset + 2
+					} else {
+						r.pos = startPos
+						r.record.spans = r.record.spans[:0]
+						return nil, false, nil
+					}
+				} else {
+					if r.pos+32 < r.end && r.buf[r.pos+32] == '\n' {
+						nextRecordPos = r.pos + 33
+					} else {
+						r.pos = startPos
+						r.record.spans = r.record.spans[:0]
+						return nil, false, nil
+					}
+				}
+			}
+
+			mDelimBeforeEOL := mDelim & ((uint32(1) << eolOffset) - 1)
+			for mDelimBeforeEOL != 0 {
+				tz := bits.TrailingZeros32(mDelimBeforeEOL)
+				delimPos := r.pos + tz
+				r.record.spans = append(r.record.spans, fieldSpan{
+					start:      uint32(currStart),
+					end:        uint32(delimPos),
+					hasEscapes: false,
+				})
+				currStart = delimPos + 1
+				mDelimBeforeEOL &= mDelimBeforeEOL - 1
+			}
+
+			fieldEnd := r.pos + eolOffset
+			r.record.spans = append(r.record.spans, fieldSpan{
+				start:      uint32(currStart),
+				end:        uint32(fieldEnd),
+				hasEscapes: false,
+			})
+
+			r.pos = nextRecordPos
+			r.line++
+
+			numFields := len(r.record.spans)
+			if r.FieldsPerRecord > 0 {
+				if numFields != r.FieldsPerRecord {
+					return nil, true, &ParseError{Line: recordLine, Err: ErrFieldCount}
+				}
+			} else if r.FieldsPerRecord == 0 {
+				if r.numFieldsFirst == 0 {
+					r.numFieldsFirst = numFields
+				} else if numFields != r.numFieldsFirst {
+					return nil, true, &ParseError{Line: recordLine, Err: ErrFieldCount}
+				}
+			}
+
+			r.record.raw = r.buf
+			return &r.record, true, nil
+		}
+
+		for mDelim != 0 {
+			tz := bits.TrailingZeros32(mDelim)
+			delimPos := r.pos + tz
+			r.record.spans = append(r.record.spans, fieldSpan{
+				start:      uint32(currStart),
+				end:        uint32(delimPos),
+				hasEscapes: false,
+			})
+			currStart = delimPos + 1
+			mDelim &= mDelim - 1
+		}
+
+		r.pos += 32
 	}
 }
 
