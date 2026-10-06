@@ -1,8 +1,9 @@
 | Task | Status | Notes |
 |---|---|---|
-| Explore project context | Completed | Empty repository initialized |
-| Ask clarifying questions | Completed | Clarified streaming+bulk, zero-alloc lexer, unsafe mapping |
-| Propose 2-3 approaches | Completed | Selected Approach 1 (Span-based Zero-Copy Lexer + Offset Mapper) |
-| Present design sections | Completed | User approved with encoding/csv, csvutil tests & AGENTS.md |
-| Write design doc | Completed | Created docs/plans/2026-10-06-fast-csv-parser-design.md, AGENTS.md, and committed |
-| Transition to implementation | Completed | Implementation plan created in docs/plans/2026-10-06-fast-csv-parser.md |
+| Task 1: Core Buffer & Span Pool Management | Completed | pool.go, pool_test.go |
+| Task 2: Fast Byte Scanner with SIMD (AVX2) and Fallback (SWAR) | In Progress | scan.go, scan_simd.go, scan_fallback.go |
+| Task 3: Zero-Allocation Low-Level CSV Reader & Port encoding/csv Tests | Not Started | reader.go, record.go, stdlib_reader_test.go |
+| Task 4: Struct Tag Parser & Cached Execution Plan | Not Started | tag.go, plan.go, plan_test.go |
+| Task 5: Zero-Allocation unsafe.Pointer Field Setters & Decoder | Not Started | setter.go, decoder.go, decoder_test.go |
+| Task 6: High-Level Unmarshal API & csvutil Test Suite | Not Started | csv.go, csvutil_test.go |
+| Task 7: Comprehensive Benchmarks & Allocation Verification | Not Started | benchmark_test.go |
