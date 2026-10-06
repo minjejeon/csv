@@ -29,11 +29,17 @@ func (e *ParseError) Unwrap() error {
 
 // Reader reads records from a CSV-encoded file.
 type Reader struct {
-	Comma            rune // Field delimiter (default ',')
-	Comment          rune // Comment character (optional)
-	FieldsPerRecord  int  // Number of expected fields per record (<0: no check, 0: first row, >0: fixed)
-	LazyQuotes       bool // Allow bare quotes in unquoted fields
-	TrimLeadingSpace bool // Trim leading whitespace from fields
+	Comma            rune   // Field delimiter (default ',')
+	Delimiter        string // Custom delimiter (e.g. "|", "||", "::"). Takes precedence if set.
+	Quote            rune   // Quote character (default '"')
+	Comment          rune   // Comment character (optional)
+	FieldsPerRecord  int    // Number of expected fields per record (<0: no check, 0: first row, >0: fixed)
+	LazyQuotes       bool   // Allow bare quotes in unquoted fields
+	TrimLeadingSpace bool   // Trim leading whitespace from fields
+
+	delimBytes   []byte
+	quoteByte    byte
+	isMultiDelim bool
 
 	r   io.Reader
 	buf []byte
@@ -54,14 +60,37 @@ type Reader struct {
 	record         Record
 }
 
-// NewReader returns a new Reader reading from r.
-func NewReader(r io.Reader) *Reader {
+func (r *Reader) initDelimAndQuote() {
+	if r.Quote == 0 {
+		r.Quote = '"'
+	}
+	r.quoteByte = byte(r.Quote)
+
+	if r.Delimiter == "" {
+		if r.Comma == 0 {
+			r.Comma = ','
+		}
+		r.Delimiter = string(r.Comma)
+	}
+	r.delimBytes = []byte(r.Delimiter)
+	if len(r.delimBytes) == 1 {
+		r.Comma = rune(r.delimBytes[0])
+		r.isMultiDelim = false
+	} else {
+		r.isMultiDelim = true
+	}
+}
+
+// NewReader returns a new Reader reading from r with optional configuration options.
+func NewReader(r io.Reader, opts ...Option) *Reader {
 	bHolder := acquireReadBuf()
 	sHolder := acquireSpanHolder()
 	fHolder := acquireFieldBufHolder()
 
 	reader := &Reader{
 		Comma:           ',',
+		Delimiter:       ",",
+		Quote:           '"',
 		FieldsPerRecord: -1,
 		r:               r,
 		bufHolder:       bHolder,
@@ -71,6 +100,10 @@ func NewReader(r io.Reader) *Reader {
 		bufSize:         defaultBufferSize,
 		line:            1,
 	}
+	for _, opt := range opts {
+		opt(reader)
+	}
+	reader.initDelimAndQuote()
 	reader.record.r = reader
 	reader.record.spans = sHolder.spans[:0]
 	return reader
