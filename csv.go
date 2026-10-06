@@ -131,11 +131,17 @@ func Unmarshal(data []byte, v any) error {
 	return nil
 }
 
-func countRecords(s []byte) int {
+func countRecords(s []byte, quote ...byte) int {
+	q := byte('"')
+	if len(quote) > 0 && quote[0] != 0 {
+		q = quote[0]
+	}
+	cutset := string([]byte{'\n', q})
+
 	var n int
 	inQuote := false
 	for len(s) > 0 {
-		i := bytes.IndexAny(s, "\n\"")
+		i := bytes.IndexAny(s, cutset)
 		if i == -1 {
 			if len(s) > 0 {
 				n++
@@ -143,19 +149,19 @@ func countRecords(s []byte) int {
 			return n
 		}
 
-		switch s[i] {
-		case '\n':
+		c := s[i]
+		if c == '\n' {
 			if !inQuote {
 				n++
 			}
 			s = s[i+1:]
-		case '"':
+		} else if c == q {
 			if !inQuote {
 				inQuote = true
 				s = s[i+1:]
 			} else {
-				if len(s) > i+1 && s[i+1] == '"' {
-					// Escaped quote "" inside quoted field
+				if len(s) > i+1 && s[i+1] == q {
+					// Escaped quote qq inside quoted field
 					s = s[i+2:]
 					continue
 				}

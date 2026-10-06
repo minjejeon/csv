@@ -11,7 +11,7 @@ type chunkSpan struct {
 
 // splitChunks divides data into approximately numWorkers chunks such that every chunk
 // boundary (except 0 and len(data)) begins cleanly at the start of a record outside any quotes.
-func splitChunks(data []byte, numWorkers int) ([]chunkSpan, error) {
+func splitChunks(data []byte, numWorkers int, quote ...byte) ([]chunkSpan, error) {
 	n := len(data)
 	if n == 0 {
 		return nil, nil
@@ -19,6 +19,12 @@ func splitChunks(data []byte, numWorkers int) ([]chunkSpan, error) {
 	if numWorkers <= 1 || n < 1024 {
 		return []chunkSpan{{start: 0, end: n}}, nil
 	}
+
+	q := byte('"')
+	if len(quote) > 0 && quote[0] != 0 {
+		q = quote[0]
+	}
+	cutset := string([]byte{'\n', q})
 
 	targetChunkSize := n / numWorkers
 	if targetChunkSize < 256 {
@@ -32,7 +38,7 @@ func splitChunks(data []byte, numWorkers int) ([]chunkSpan, error) {
 
 	for currentPos < n {
 		// Look for next quote or newline
-		idx := bytes.IndexAny(data[currentPos:], "\"\n")
+		idx := bytes.IndexAny(data[currentPos:], cutset)
 		if idx < 0 {
 			break
 		}
@@ -40,13 +46,13 @@ func splitChunks(data []byte, numWorkers int) ([]chunkSpan, error) {
 		matchPos := currentPos + idx
 		c := data[matchPos]
 
-		if c == '"' {
+		if c == q {
 			if !inQuote {
 				inQuote = true
 				currentPos = matchPos + 1
 			} else {
-				// Check for escaped quote "" inside quoted field
-				if matchPos+1 < n && data[matchPos+1] == '"' {
+				// Check for escaped quote qq inside quoted field
+				if matchPos+1 < n && data[matchPos+1] == q {
 					currentPos = matchPos + 2
 					continue
 				}

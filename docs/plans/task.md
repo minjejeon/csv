@@ -10,6 +10,6 @@
 | Task 1: Functional Options Core | Completed | option.go, option_test.go |
 | Task 2: Scanner Custom Delimiter & Quote Vector Search | Completed | scan_simd.go, scan_swar.go, scan_fallback.go, scan_test.go |
 | Task 3: Reader Multi-Char Delimiter & Custom Quote Engine | Completed | reader.go, reader_test.go |
-| Task 4: Chunk Splitter & Record Counter Support | Pending | chunk.go, chunk_test.go, csv.go |
+| Task 4: Chunk Splitter & Record Counter Support | Completed | chunk.go, chunk_test.go, csv.go |
 | Task 5: Integration Across Decoder, Unmarshal, Generic, and Parallel APIs | Pending | decoder.go, csv.go, generic.go, parallel.go, custom_delim_test.go |
 | Task 6: Comprehensive Verification, Tag & Push | Pending | git commit, tag v0.2.0, push to GitHub |

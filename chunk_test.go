@@ -132,3 +132,40 @@ func TestSplitChunksWithEscapedAndEmptyQuotes(t *testing.T) {
 	}
 }
 
+func TestSplitChunksCustomQuote(t *testing.T) {
+	var buf bytes.Buffer
+	buf.WriteString("id||desc||val\n")
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&buf, "%d||'multiline\n''with_quotes''\nline'||%d\n", i, i)
+	}
+	data := buf.Bytes()
+
+	chunks, err := splitChunks(data, 4, '\'')
+	if err != nil {
+		t.Fatalf("splitChunks failed: %v", err)
+	}
+
+	for i := 1; i < len(chunks); i++ {
+		start := chunks[i].start
+		if data[start-1] != '\n' {
+			t.Fatalf("chunk %d does not start after newline", i)
+		}
+		r := NewReader(bytes.NewReader(data[start:chunks[i].end]), WithDelimiter("||"), WithQuote('\''))
+		rec, err := r.Read()
+		if err != nil {
+			t.Fatalf("chunk %d first record parse failed: %v", i, err)
+		}
+		if len(rec) != 3 {
+			t.Fatalf("chunk %d expected 3 fields, got %d: %v", i, len(rec), rec)
+		}
+	}
+}
+
+func TestCountRecordsCustomQuote(t *testing.T) {
+	data := []byte("1,'line1\nline2',a\n2,'simple',b\n")
+	count := countRecords(data, '\'')
+	if count != 2 {
+		t.Fatalf("expected 2 records, got %d", count)
+	}
+}
+
