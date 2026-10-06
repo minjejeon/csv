@@ -49,6 +49,8 @@ type Reader struct {
 	line    int
 
 	numFieldsFirst int
+	recordStart    int
+	currFieldStart int
 	record         Record
 }
 
@@ -123,11 +125,27 @@ func (r *Reader) ensureMore() error {
 	if r.eof {
 		return nil
 	}
-	if r.end == len(r.buf) {
-		newSize := len(r.buf) * 2
-		newBuf := make([]byte, newSize)
-		copy(newBuf, r.buf)
-		r.buf = newBuf
+
+	if r.end == len(r.buf) || (r.recordStart > 0 && r.recordStart > len(r.buf)/2) {
+		if r.recordStart > 0 {
+			shift := r.recordStart
+			n := copy(r.buf, r.buf[shift:r.end])
+			r.pos -= shift
+			r.end = n
+			r.recordStart = 0
+			if r.currFieldStart >= shift {
+				r.currFieldStart -= shift
+			}
+			for i := range r.record.spans {
+				r.record.spans[i].start -= uint32(shift)
+				r.record.spans[i].end -= uint32(shift)
+			}
+		} else if r.end == len(r.buf) {
+			newSize := len(r.buf) * 2
+			newBuf := make([]byte, newSize)
+			copy(newBuf, r.buf)
+			r.buf = newBuf
+		}
 	}
 
 	readTarget := len(r.buf)
@@ -152,13 +170,6 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	delim := byte(r.Comma)
 	if r.Comma == 0 {
 		delim = ','
-	}
-
-	// Shift unread bytes to index 0 so the new record always starts cleanly at 0
-	if r.pos > 0 {
-		n := copy(r.buf, r.buf[r.pos:r.end])
-		r.end = n
-		r.pos = 0
 	}
 
 	r.record.spans = r.record.spans[:0]
@@ -216,13 +227,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		break
 	}
 
-	// Shift again if comments or blank lines advanced pos
-	if r.pos > 0 {
-		n := copy(r.buf, r.buf[r.pos:r.end])
-		r.end = n
-		r.pos = 0
-	}
-
+	r.recordStart = r.pos
 	recordLine := r.line
 
 	// 2. Parse fields
@@ -261,7 +266,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		// Check if quoted field
 		if r.pos < r.end && r.buf[r.pos] == '"' {
 			r.pos++ // consume opening quote
-			fieldStart := r.pos
+			r.currFieldStart = r.pos
 			hasEscapes := false
 
 			for {
@@ -314,7 +319,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 					}
 
 					r.record.spans = append(r.record.spans, fieldSpan{
-						start:      uint32(fieldStart),
+						start:      uint32(r.currFieldStart),
 						end:        uint32(fieldEnd),
 						hasEscapes: hasEscapes,
 					})
@@ -327,7 +332,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 						return nil, &ParseError{Line: recordLine, Err: ErrQuote}
 					}
 					r.record.spans = append(r.record.spans, fieldSpan{
-						start:      uint32(fieldStart),
+						start:      uint32(r.currFieldStart),
 						end:        uint32(r.end),
 						hasEscapes: hasEscapes,
 					})
@@ -342,7 +347,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 			}
 		} else {
 			// Unquoted field
-			fieldStart := r.pos
+			r.currFieldStart = r.pos
 			foundEnd := false
 
 			for !foundEnd {
@@ -354,7 +359,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 					if c == delim || c == '\n' {
 						fieldEnd := targetPos
 						r.record.spans = append(r.record.spans, fieldSpan{
-							start:      uint32(fieldStart),
+							start:      uint32(r.currFieldStart),
 							end:        uint32(fieldEnd),
 							hasEscapes: false,
 						})
@@ -372,7 +377,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 							// CRLF is end of line
 							fieldEnd := targetPos
 							r.record.spans = append(r.record.spans, fieldSpan{
-								start:      uint32(fieldStart),
+								start:      uint32(r.currFieldStart),
 								end:        uint32(fieldEnd),
 								hasEscapes: false,
 							})
@@ -383,7 +388,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 							// Trailing CR at EOF
 							fieldEnd := targetPos
 							r.record.spans = append(r.record.spans, fieldSpan{
-								start:      uint32(fieldStart),
+								start:      uint32(r.currFieldStart),
 								end:        uint32(fieldEnd),
 								hasEscapes: false,
 							})
@@ -407,7 +412,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 				if r.eof {
 					fieldEnd := r.end
 					r.record.spans = append(r.record.spans, fieldSpan{
-						start:      uint32(fieldStart),
+						start:      uint32(r.currFieldStart),
 						end:        uint32(fieldEnd),
 						hasEscapes: false,
 					})
