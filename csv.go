@@ -125,6 +125,100 @@ func Unmarshal(data []byte, v any, opts ...Option) error {
 	return nil
 }
 
+// Marshal encodes a slice of structs or slice of struct pointers into CSV bytes.
+func Marshal(v any, opts ...any) ([]byte, error) {
+	val := reflect.ValueOf(v)
+	if !val.IsValid() {
+		return nil, errors.New("csv: Marshal(nil)")
+	}
+	if val.Kind() == reflect.Pointer {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
+		return nil, fmt.Errorf("csv: Marshal expects a slice or array, got %v", val.Kind())
+	}
+
+	elemType := val.Type().Elem()
+	isPtr := false
+	structType := elemType
+	if elemType.Kind() == reflect.Pointer {
+		isPtr = true
+		structType = elemType.Elem()
+	}
+
+	if structType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("csv: slice elements must be structs or pointers to structs, got %v", elemType)
+	}
+
+	plan, err := getTypeMarshalPlan(structType)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	w := NewWriter(&buf, opts...)
+
+	if err := w.Write(plan.headerRow); err != nil {
+		return nil, err
+	}
+
+	n := val.Len()
+	elemSize := structType.Size()
+	ptrSize := unsafe.Sizeof(uintptr(0))
+
+	if n > 0 {
+		var sliceBasePtr unsafe.Pointer
+		if val.Kind() == reflect.Slice {
+			sliceBasePtr = val.UnsafePointer()
+		} else {
+			if val.CanAddr() {
+				sliceBasePtr = val.Addr().UnsafePointer()
+			} else {
+				newVal := reflect.New(val.Type()).Elem()
+				newVal.Set(val)
+				sliceBasePtr = newVal.Addr().UnsafePointer()
+			}
+		}
+		for i := 0; i < n; i++ {
+			var structPtr unsafe.Pointer
+			if isPtr {
+				structPtr = *(*unsafe.Pointer)(unsafe.Add(sliceBasePtr, uintptr(i)*ptrSize))
+				if structPtr == nil {
+					for j := range plan.fields {
+						if j > 0 {
+							w.WriteDelimiter()
+						}
+					}
+					if err := w.WriteNewline(); err != nil {
+						return nil, err
+					}
+					continue
+				}
+			} else {
+				structPtr = unsafe.Add(sliceBasePtr, uintptr(i)*elemSize)
+			}
+
+			for j, f := range plan.fields {
+				if j > 0 {
+					w.WriteDelimiter()
+				}
+				if err := f.getter(structPtr, w); err != nil {
+					return nil, fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
+				}
+			}
+			if err := w.WriteNewline(); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if err := w.Flush(); err != nil {
+		return nil, err
+	}
+	w.Close()
+	return buf.Bytes(), nil
+}
+
 func countRecords(s []byte, quote ...byte) int {
 	q := byte('"')
 	if len(quote) > 0 && quote[0] != 0 {

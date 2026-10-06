@@ -1,0 +1,296 @@
+package csv
+
+import (
+	"encoding"
+	"fmt"
+	"reflect"
+	"strconv"
+	"sync"
+	"time"
+	"unsafe"
+)
+
+var (
+	textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+)
+
+type fieldGetterFunc func(structPtr unsafe.Pointer, w *Writer) error
+
+type fieldGetterPlan struct {
+	colName string
+	offset  uintptr
+	getter  fieldGetterFunc
+}
+
+type typeMarshalPlan struct {
+	structType reflect.Type
+	fields     []fieldGetterPlan
+	headerRow  []string
+}
+
+var marshalPlanCache sync.Map // reflect.Type -> *typeMarshalPlan
+
+func getTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("csv: expected struct type, got %v", t)
+	}
+
+	if val, ok := marshalPlanCache.Load(t); ok {
+		return val.(*typeMarshalPlan), nil
+	}
+
+	plan, err := buildTypeMarshalPlan(t)
+	if err != nil {
+		return nil, err
+	}
+	marshalPlanCache.Store(t, plan)
+	return plan, nil
+}
+
+func buildTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
+	fieldInfos := collectStructFields(t, 0, nil)
+	plan := &typeMarshalPlan{
+		structType: t,
+		fields:     make([]fieldGetterPlan, 0, len(fieldInfos)),
+		headerRow:  make([]string, 0, len(fieldInfos)),
+	}
+
+	for _, fi := range fieldInfos {
+		colName := fi.name
+		if fi.tag.name != "" {
+			colName = fi.tag.name
+		}
+
+		getter, err := compileGetter(fi)
+		if err != nil {
+			return nil, fmt.Errorf("csv: failed compiling getter for field %s: %w", fi.name, err)
+		}
+
+		plan.fields = append(plan.fields, fieldGetterPlan{
+			colName: colName,
+			offset:  fi.offset,
+			getter:  getter,
+		})
+		plan.headerRow = append(plan.headerRow, colName)
+	}
+
+	return plan, nil
+}
+
+func compileGetter(f structFieldInfo) (fieldGetterFunc, error) {
+	offset := f.offset
+	omitEmpty := f.tag.omitEmpty
+
+	if f.fieldType == timeType {
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			t := *(*time.Time)(unsafe.Add(structPtr, offset))
+			if t.IsZero() && omitEmpty {
+				return nil
+			}
+			var scratch [64]byte
+			b := t.AppendFormat(scratch[:0], time.RFC3339)
+			w.WriteFieldBytes(b)
+			return nil
+		}, nil
+	}
+
+	if f.fieldType.Implements(textMarshalerType) || reflect.PointerTo(f.fieldType).Implements(textMarshalerType) {
+		t := f.fieldType
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			ptr := unsafe.Add(structPtr, offset)
+			val := reflect.NewAt(t, ptr)
+			if m, ok := val.Interface().(encoding.TextMarshaler); ok {
+				b, err := m.MarshalText()
+				if err != nil {
+					return err
+				}
+				w.WriteFieldBytes(b)
+				return nil
+			}
+			return nil
+		}, nil
+	}
+
+	if f.fieldType.Kind() == reflect.Pointer {
+		elemType := f.fieldType.Elem()
+		elemGetter, err := compileGetter(structFieldInfo{
+			name:      f.name,
+			offset:    0,
+			fieldType: elemType,
+			tag:       f.tag,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			ptr := *(*unsafe.Pointer)(unsafe.Add(structPtr, offset))
+			if ptr == nil {
+				return nil
+			}
+			return elemGetter(ptr, w)
+		}, nil
+	}
+
+	switch f.fieldType.Kind() {
+	case reflect.String:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			s := *(*string)(unsafe.Add(structPtr, offset))
+			if len(s) == 0 && omitEmpty {
+				return nil
+			}
+			w.WriteFieldBytes(unsafe.Slice(unsafe.StringData(s), len(s)))
+			return nil
+		}, nil
+
+	case reflect.Int:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*int)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendInt(scratch[:0], int64(v), 10))
+			return nil
+		}, nil
+
+	case reflect.Int64:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*int64)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendInt(scratch[:0], v, 10))
+			return nil
+		}, nil
+
+	case reflect.Int32:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*int32)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendInt(scratch[:0], int64(v), 10))
+			return nil
+		}, nil
+
+	case reflect.Int16:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*int16)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendInt(scratch[:0], int64(v), 10))
+			return nil
+		}, nil
+
+	case reflect.Int8:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*int8)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendInt(scratch[:0], int64(v), 10))
+			return nil
+		}, nil
+
+	case reflect.Uint:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*uint)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendUint(scratch[:0], uint64(v), 10))
+			return nil
+		}, nil
+
+	case reflect.Uint64:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*uint64)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendUint(scratch[:0], v, 10))
+			return nil
+		}, nil
+
+	case reflect.Uint32:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*uint32)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendUint(scratch[:0], uint64(v), 10))
+			return nil
+		}, nil
+
+	case reflect.Uint16:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*uint16)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendUint(scratch[:0], uint64(v), 10))
+			return nil
+		}, nil
+
+	case reflect.Uint8:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*uint8)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [32]byte
+			w.WriteFieldBytes(strconv.AppendUint(scratch[:0], uint64(v), 10))
+			return nil
+		}, nil
+
+	case reflect.Float64:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*float64)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [64]byte
+			w.WriteFieldBytes(strconv.AppendFloat(scratch[:0], v, 'f', -1, 64))
+			return nil
+		}, nil
+
+	case reflect.Float32:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*float32)(unsafe.Add(structPtr, offset))
+			if v == 0 && omitEmpty {
+				return nil
+			}
+			var scratch [64]byte
+			w.WriteFieldBytes(strconv.AppendFloat(scratch[:0], float64(v), 'f', -1, 32))
+			return nil
+		}, nil
+
+	case reflect.Bool:
+		return func(structPtr unsafe.Pointer, w *Writer) error {
+			v := *(*bool)(unsafe.Add(structPtr, offset))
+			if !v && omitEmpty {
+				return nil
+			}
+			if v {
+				w.WriteFieldBytes([]byte("true"))
+			} else {
+				w.WriteFieldBytes([]byte("false"))
+			}
+			return nil
+		}, nil
+	}
+
+	return nil, fmt.Errorf("csv: unsupported field type %v", f.fieldType)
+}

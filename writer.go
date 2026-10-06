@@ -164,3 +164,33 @@ func (w *Writer) WriteAll(records [][]string) error {
 	}
 	return w.Flush()
 }
+
+// WriteFieldBytes writes a raw byte slice field with SIMD quoting if required.
+func (w *Writer) WriteFieldBytes(field []byte) {
+	if !w.hasScanner {
+		w.initDelimAndQuote()
+	}
+	w.writeFieldBytes(field)
+}
+
+// WriteDelimiter writes the field delimiter.
+func (w *Writer) WriteDelimiter() {
+	if !w.hasScanner {
+		w.initDelimAndQuote()
+	}
+	w.buf = append(w.buf, w.delimBytes...)
+}
+
+// WriteNewline writes the line terminator and auto-flushes if needed.
+func (w *Writer) WriteNewline() error {
+	if w.UseCRLF {
+		w.buf = append(w.buf, '\r', '\n')
+	} else {
+		w.buf = append(w.buf, '\n')
+	}
+	if len(w.buf) >= 60*1024 {
+		return w.Flush()
+	}
+	return nil
+}
+
