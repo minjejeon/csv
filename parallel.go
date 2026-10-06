@@ -7,6 +7,7 @@ import (
 	"io"
 	"reflect"
 	"sync"
+	"unsafe"
 )
 
 // DefaultParallelWorkers is the default number of worker goroutines for parallel parsing.
@@ -94,8 +95,20 @@ func ParallelUnmarshal(data []byte, v any, opts ...ParallelOptions) error {
 			}
 			defer r.Close()
 
-			localSlice := reflect.MakeSlice(sliceVal.Type(), 0, 128)
+			c := countRecords(data[span.start:span.end])
+			if chunkIdx == 0 && c > 1 {
+				c--
+			}
+			if c < 16 {
+				c = 16
+			}
 
+			localSlice := reflect.MakeSlice(sliceVal.Type(), c, c)
+			sliceBasePtr := localSlice.Index(0).Addr().UnsafePointer()
+			elemSize := structType.Size()
+			ptrSize := unsafe.Sizeof(uintptr(0))
+
+			rowIdx := 0
 			for {
 				rec, err := r.ReadRecord()
 				if err != nil {
@@ -106,6 +119,17 @@ func ParallelUnmarshal(data []byte, v any, opts ...ParallelOptions) error {
 						workerErr = err
 					})
 					return
+				}
+
+				if rowIdx >= localSlice.Len() {
+					newCap := localSlice.Len() * 2
+					if newCap < 16 {
+						newCap = 16
+					}
+					newSlice := reflect.MakeSlice(sliceVal.Type(), newCap, newCap)
+					reflect.Copy(newSlice, localSlice)
+					localSlice = newSlice
+					sliceBasePtr = localSlice.Index(0).Addr().UnsafePointer()
 				}
 
 				numFields := rec.NumFields()
@@ -128,10 +152,9 @@ func ParallelUnmarshal(data []byte, v any, opts ...ParallelOptions) error {
 							}
 						}
 					}
-					localSlice = reflect.Append(localSlice, newElem)
+					*(*unsafe.Pointer)(unsafe.Add(sliceBasePtr, uintptr(rowIdx)*ptrSize)) = structPtr
 				} else {
-					newElem := reflect.New(structType).Elem()
-					structPtr := newElem.Addr().UnsafePointer()
+					structPtr := unsafe.Add(sliceBasePtr, uintptr(rowIdx)*elemSize)
 
 					for _, f := range plan.fields {
 						if f.colIndex < numFields {
@@ -147,11 +170,12 @@ func ParallelUnmarshal(data []byte, v any, opts ...ParallelOptions) error {
 							}
 						}
 					}
-					localSlice = reflect.Append(localSlice, newElem)
 				}
+
+				rowIdx++
 			}
 
-			chunkResults[chunkIdx] = localSlice
+			chunkResults[chunkIdx] = localSlice.Slice(0, rowIdx)
 		}()
 	}
 

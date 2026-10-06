@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"unsafe"
 )
 
 // Unmarshal parses CSV-encoded data and stores the result in the slice pointed to by v.
@@ -53,6 +54,20 @@ func Unmarshal(data []byte, v any) error {
 		return err
 	}
 
+	c := countRecords(data)
+	if c > 1 {
+		c-- // exclude header
+	}
+	if c < 16 {
+		c = 16
+	}
+
+	slice := reflect.MakeSlice(sliceVal.Type(), c, c)
+	sliceBasePtr := slice.Index(0).Addr().UnsafePointer()
+	elemSize := structType.Size()
+	ptrSize := unsafe.Sizeof(uintptr(0))
+
+	rowIdx := 0
 	for {
 		rec, err := dec.r.ReadRecord()
 		if err != nil {
@@ -60,6 +75,17 @@ func Unmarshal(data []byte, v any) error {
 				break
 			}
 			return err
+		}
+
+		if rowIdx >= slice.Len() {
+			newCap := slice.Len() * 2
+			if newCap < 16 {
+				newCap = 16
+			}
+			newSlice := reflect.MakeSlice(sliceVal.Type(), newCap, newCap)
+			reflect.Copy(newSlice, slice)
+			slice = newSlice
+			sliceBasePtr = slice.Index(0).Addr().UnsafePointer()
 		}
 
 		numFields := rec.NumFields()
@@ -80,10 +106,9 @@ func Unmarshal(data []byte, v any) error {
 				}
 			}
 
-			sliceVal = reflect.Append(sliceVal, newElem)
+			*(*unsafe.Pointer)(unsafe.Add(sliceBasePtr, uintptr(rowIdx)*ptrSize)) = structPtr
 		} else {
-			newElem := reflect.New(structType).Elem()
-			structPtr := newElem.Addr().UnsafePointer()
+			structPtr := unsafe.Add(sliceBasePtr, uintptr(rowIdx)*elemSize)
 
 			for _, f := range plan.fields {
 				if f.colIndex < numFields {
@@ -96,11 +121,37 @@ func Unmarshal(data []byte, v any) error {
 					}
 				}
 			}
-
-			sliceVal = reflect.Append(sliceVal, newElem)
 		}
+
+		rowIdx++
 	}
 
-	val.Elem().Set(sliceVal)
+	val.Elem().Set(slice.Slice(0, rowIdx))
 	return nil
+}
+
+func countRecords(s []byte) int {
+	var n int
+	inQuote := false
+	for len(s) > 0 {
+		i := bytes.IndexAny(s, "\n\"")
+		if i == -1 {
+			if len(s) > 0 {
+				n++
+			}
+			return n
+		}
+
+		switch s[i] {
+		case '\n':
+			if !inQuote {
+				n++
+			}
+		case '"':
+			inQuote = !inQuote
+		}
+
+		s = s[i+1:]
+	}
+	return n
 }
