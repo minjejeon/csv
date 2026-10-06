@@ -24,7 +24,7 @@
 | SIMD Optimization: Present Design Sections & User Approval | Completed | All sections reviewed & approved with profiling |
 | SIMD Optimization: Write Design Doc & Git Commit | Completed | docs/plans/2026-10-07-simd-acceleration-design.md |
 | SIMD Optimization: Implementation Planning | Completed | docs/plans/2026-10-07-simd-acceleration.md |
-| Task 1: Vectorized Architecture Scanner & Broadcast Register Cache | Pending | scan_simd.go, reader.go |
+| Task 1: Vectorized Architecture Scanner & Broadcast Register Cache | In Progress | scan_simd.go, reader.go |
 | Task 2: DuckDB-Style No-Quote Fast-Path Block Scanner | Pending | scan_simd.go, scan_swar.go, reader.go |
 | Task 3: SIMD Vectorized Record & Chunk Counting | Pending | csv.go, chunk.go |
 | Task 4: Fast SWAR ASCII Integer & Boolean Parsing in Struct Decoder | Pending | setter.go, decoder.go |

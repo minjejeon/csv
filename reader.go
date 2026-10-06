@@ -45,6 +45,7 @@ type Reader struct {
 	isMultiDelim bool
 	encoding     encoding.Encoding
 	initErr      error
+	scanner      blockScanner
 
 	r   io.Reader
 	buf []byte
@@ -84,6 +85,7 @@ func (r *Reader) initDelimAndQuote() {
 	} else {
 		r.isMultiDelim = true
 	}
+	r.scanner = newBlockScanner(r.delimBytes[0], r.quoteByte)
 }
 
 // NewReader returns a new Reader reading from r with optional configuration options.
@@ -466,7 +468,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 			foundEnd := false
 
 			for !foundEnd {
-				specIdx := findNextSpecial(r.buf[r.pos:r.end], delim, r.quoteByte)
+				specIdx := r.scanner.scanSpecial(r.buf[r.pos:r.end])
 				if specIdx >= 0 {
 					targetPos := r.pos + specIdx
 					c := r.buf[targetPos]

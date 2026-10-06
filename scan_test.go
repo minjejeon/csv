@@ -106,3 +106,11 @@ func BenchmarkScanner(b *testing.B) {
 		}
 	}
 }
+
+func TestScanSpecialPrecomputedVectors(t *testing.T) {
+	data := []byte("field1,field2,field3\n")
+	idx := findNextSpecial(data, ',', '"')
+	if idx != 6 {
+		t.Fatalf("expected 6, got %d", idx)
+	}
+}
