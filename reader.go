@@ -669,6 +669,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	}
 
 	r.record.raw = r.buf
+	r.record.line = recordLine
 	return &r.record, nil
 }
 
@@ -798,6 +799,7 @@ func (r *Reader) readRecordFastNoQuote(recordLine int) (*Record, bool, error) {
 			}
 
 			r.record.raw = r.buf
+			r.record.line = recordLine
 			return &r.record, true, nil
 		}
 

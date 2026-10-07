@@ -218,7 +218,18 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 							raw := rec.Field(f.colIndex)
 							if err := f.setter(structPtr, raw); err != nil {
 								once.Do(func() {
-									workerErr = fmt.Errorf("csv: error parsing field %q: %w", f.fieldName, err)
+									headerName := ""
+									if f.colIndex < len(headers) {
+										headerName = headers[f.colIndex]
+									}
+									workerErr = &DecodeError{
+										Line:   rec.line,
+										Column: f.colIndex,
+										Header: headerName,
+										Field:  f.fieldName,
+										Value:  string(raw),
+										Err:    err,
+									}
 								})
 								return
 							}
@@ -233,7 +244,18 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 							raw := rec.Field(f.colIndex)
 							if err := f.setter(structPtr, raw); err != nil {
 								once.Do(func() {
-									workerErr = fmt.Errorf("csv: error parsing field %q: %w", f.fieldName, err)
+									headerName := ""
+									if f.colIndex < len(headers) {
+										headerName = headers[f.colIndex]
+									}
+									workerErr = &DecodeError{
+										Line:   rec.line,
+										Column: f.colIndex,
+										Header: headerName,
+										Field:  f.fieldName,
+										Value:  string(raw),
+										Err:    err,
+									}
 								})
 								return
 							}

@@ -10,6 +10,12 @@ type Record struct {
 	r     *Reader
 	raw   []byte
 	spans []fieldSpan
+	line  int
+}
+
+// Line returns the line number (1-based) where the record starts in the CSV input.
+func (rec *Record) Line() int {
+	return rec.line
 }
 
 // NumFields returns the number of fields in the record.
@@ -79,6 +85,7 @@ func (rec *Record) Clone() *Record {
 		r:     nil,
 		raw:   clonedRaw,
 		spans: clonedSpans,
+		line:  rec.line,
 	}
 }
 

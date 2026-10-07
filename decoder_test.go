@@ -3,6 +3,7 @@ package csv
 import (
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -162,6 +163,72 @@ func TestDecoderCloseAndReset(t *testing.T) {
 	}
 	if err := dec.Close(); err != nil {
 		t.Fatalf("close failed: %v", err)
+	}
+}
+
+func TestStructuredDecodeError(t *testing.T) {
+	csvData := "id,name,age\n1,Alice,30\n2,Bob,not_a_number\n"
+	dec, err := NewDecoder(strings.NewReader(csvData))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var row struct {
+		ID   int    `csv:"id"`
+		Name string `csv:"name"`
+		Age  int    `csv:"age"`
+	}
+
+	if err := dec.Decode(&row); err != nil {
+		t.Fatalf("row 1 failed: %v", err)
+	}
+
+	err = dec.Decode(&row)
+	if err == nil {
+		t.Fatal("expected error on row 2, got nil")
+	}
+
+	var decErr *DecodeError
+	if !errors.As(err, &decErr) {
+		t.Fatalf("expected error to be *DecodeError, got %T: %v", err, err)
+	}
+
+	if decErr.Line != 3 {
+		t.Errorf("decErr.Line = %d, want 3", decErr.Line)
+	}
+	if decErr.Column != 2 {
+		t.Errorf("decErr.Column = %d, want 2", decErr.Column)
+	}
+	if decErr.Header != "age" {
+		t.Errorf("decErr.Header = %q, want 'age'", decErr.Header)
+	}
+	if decErr.Field != "Age" {
+		t.Errorf("decErr.Field = %q, want 'Age'", decErr.Field)
+	}
+	if decErr.Value != "not_a_number" {
+		t.Errorf("decErr.Value = %q, want 'not_a_number'", decErr.Value)
+	}
+	if !errors.Is(err, strconv.ErrSyntax) {
+		t.Errorf("expected errors.Is(err, strconv.ErrSyntax) to be true, got false")
+	}
+
+	wantSubstr := "csv: line 3, column \"age\" (field Age): invalid syntax (value: \"not_a_number\")"
+	if decErr.Error() != wantSubstr {
+		t.Errorf("decErr.Error() = %q, want %q", decErr.Error(), wantSubstr)
+	}
+
+	// Test Unmarshal also returns *DecodeError
+	var rows []struct {
+		ID  int `csv:"id"`
+		Age int `csv:"age"`
+	}
+	unmarshalErr := Unmarshal([]byte(csvData), &rows)
+	var decErr2 *DecodeError
+	if !errors.As(unmarshalErr, &decErr2) {
+		t.Fatalf("expected Unmarshal error to be *DecodeError, got %T: %v", unmarshalErr, unmarshalErr)
+	}
+	if decErr2.Line != 3 || decErr2.Value != "not_a_number" {
+		t.Errorf("decErr2 mismatch: %+v", decErr2)
 	}
 }
 

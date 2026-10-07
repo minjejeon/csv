@@ -99,7 +99,18 @@ func Unmarshal(data []byte, v any, opts ...Option) error {
 				if f.colIndex < numFields {
 					raw := rec.Field(f.colIndex)
 					if err := f.setter(structPtr, raw); err != nil {
-						return fmt.Errorf("csv: error parsing field %q: %w", f.fieldName, err)
+						headerName := ""
+						if f.colIndex < len(dec.headers) {
+							headerName = dec.headers[f.colIndex]
+						}
+						return &DecodeError{
+							Line:   rec.line,
+							Column: f.colIndex,
+							Header: headerName,
+							Field:  f.fieldName,
+							Value:  string(raw),
+							Err:    err,
+						}
 					}
 				}
 			}
@@ -112,7 +123,18 @@ func Unmarshal(data []byte, v any, opts ...Option) error {
 				if f.colIndex < numFields {
 					raw := rec.Field(f.colIndex)
 					if err := f.setter(structPtr, raw); err != nil {
-						return fmt.Errorf("csv: error parsing field %q: %w", f.fieldName, err)
+						headerName := ""
+						if f.colIndex < len(dec.headers) {
+							headerName = dec.headers[f.colIndex]
+						}
+						return &DecodeError{
+							Line:   rec.line,
+							Column: f.colIndex,
+							Header: headerName,
+							Field:  f.fieldName,
+							Value:  string(raw),
+							Err:    err,
+						}
 					}
 				}
 			}
