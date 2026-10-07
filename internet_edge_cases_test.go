@@ -94,7 +94,7 @@ func TestInternetEdgeCases(t *testing.T) {
 		{
 			name:     "unicode bom prefix stripped or handled cleanly",
 			input:    "\xef\xbb\xbfa,b,c\n1,2,3\n",
-			expected: [][]string{{"\xef\xbb\xbfa", "b", "c"}, {"1", "2", "3"}},
+			expected: [][]string{{"a", "b", "c"}, {"1", "2", "3"}},
 		},
 	}
 

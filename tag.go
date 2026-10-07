@@ -33,6 +33,7 @@ type csvTag struct {
 	omitEmpty bool
 	inline    bool
 	unique    bool
+	format    string
 }
 
 func parseTag(tagStr string) csvTag {
@@ -45,13 +46,15 @@ func parseTag(tagStr string) csvTag {
 	}
 	for _, opt := range parts[1:] {
 		opt = strings.TrimSpace(opt)
-		switch opt {
-		case "omitempty":
+		switch {
+		case opt == "omitempty":
 			tag.omitEmpty = true
-		case "inline":
+		case opt == "inline":
 			tag.inline = true
-		case "unique", "intern":
+		case opt == "unique" || opt == "intern":
 			tag.unique = true
+		case strings.HasPrefix(opt, "format="):
+			tag.format = strings.TrimPrefix(opt, "format=")
 		}
 	}
 	return tag

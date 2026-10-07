@@ -229,8 +229,29 @@ func parseBoolFast(b []byte) (bool, error) {
 	return false, strconv.ErrSyntax
 }
 
+func resolveTimeFormat(f string) string {
+	switch strings.ToLower(f) {
+	case "rfc3339":
+		return time.RFC3339
+	case "dateonly", "date":
+		return "2006-01-02"
+	case "datetime":
+		return "2006-01-02 15:04:05"
+	case "rfc822":
+		return time.RFC822
+	case "rfc1123":
+		return time.RFC1123
+	default:
+		return f
+	}
+}
+
 func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, error) {
 	if t == timeType {
+		format := tag.format
+		isUnix := strings.EqualFold(format, "unix")
+		isUnixMilli := strings.EqualFold(format, "unixmilli")
+
 		return func(structPtr unsafe.Pointer, raw []byte) error {
 			if len(raw) == 0 {
 				if tag.omitEmpty {
@@ -239,7 +260,34 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 				}
 				return strconv.ErrSyntax
 			}
+
+			if isUnix {
+				sec, err := parseSignedInt(raw, 64)
+				if err != nil {
+					return err
+				}
+				*(*time.Time)(unsafe.Add(structPtr, offset)) = time.Unix(sec, 0).UTC()
+				return nil
+			}
+			if isUnixMilli {
+				milli, err := parseSignedInt(raw, 64)
+				if err != nil {
+					return err
+				}
+				*(*time.Time)(unsafe.Add(structPtr, offset)) = time.UnixMilli(milli).UTC()
+				return nil
+			}
+
 			s := unsafe.String(unsafe.SliceData(raw), len(raw))
+			if format != "" {
+				parsed, err := time.Parse(resolveTimeFormat(format), s)
+				if err != nil {
+					return err
+				}
+				*(*time.Time)(unsafe.Add(structPtr, offset)) = parsed
+				return nil
+			}
+
 			parsed, err := time.Parse(time.RFC3339, s)
 			if err != nil {
 				// Try date only fallback

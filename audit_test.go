@@ -309,3 +309,79 @@ func TestRecordClone(t *testing.T) {
 
 	_ = rec2
 }
+
+type eventTimeStruct struct {
+	ID        int       `csv:"id"`
+	CreatedAt time.Time `csv:"created_at,format=2006-01-02 15:04:05"`
+	Date      time.Time `csv:"date,format=2006/01/02"`
+	UnixSec   time.Time `csv:"ts,format=unix"`
+}
+
+func TestTimeCustomFormatTag(t *testing.T) {
+	data := "id,created_at,date,ts\n1,2026-10-07 14:30:00,2026/12/25,1770000000\n"
+	var events []eventTimeStruct
+	if err := Unmarshal([]byte(data), &events); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev.CreatedAt.Year() != 2026 || ev.CreatedAt.Hour() != 14 || ev.CreatedAt.Minute() != 30 {
+		t.Errorf("CreatedAt = %v, want 2026-10-07 14:30:00", ev.CreatedAt)
+	}
+	if ev.Date.Month() != 12 || ev.Date.Day() != 25 {
+		t.Errorf("Date = %v, want 2026/12/25", ev.Date)
+	}
+	if ev.UnixSec.Unix() != 1770000000 {
+		t.Errorf("UnixSec = %d, want 1770000000", ev.UnixSec.Unix())
+	}
+
+	// Test Marshal round-trip
+	out, err := Marshal(events)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	wantSubstr := "1,2026-10-07 14:30:00,2026/12/25,1770000000"
+	if !strings.Contains(string(out), wantSubstr) {
+		t.Errorf("Marshal output mismatch:\ngot:  %s\nwant contains: %s", string(out), wantSubstr)
+	}
+}
+
+func TestUTF8BOMStripping(t *testing.T) {
+	bomCSV := "\xef\xbb\xbfid,name\n1,Alice\n"
+
+	// 1. Reader default (WithTrimBOM is true)
+	r := NewReader(strings.NewReader(bomCSV))
+	rec, err := r.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if rec[0] != "id" {
+		t.Errorf("header 0 = %q, want 'id' (BOM should be stripped)", rec[0])
+	}
+
+	// 2. Unmarshal to struct maps id cleanly
+	type item struct {
+		ID   int    `csv:"id"`
+		Name string `csv:"name"`
+	}
+	var items []item
+	if err := Unmarshal([]byte(bomCSV), &items); err != nil {
+		t.Fatalf("Unmarshal with BOM failed: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != 1 || items[0].Name != "Alice" {
+		t.Errorf("unexpected items with BOM: %+v", items)
+	}
+
+	// 3. Reader with WithTrimBOM(false) preserves BOM
+	rNoTrim := NewReader(strings.NewReader(bomCSV), WithTrimBOM(false))
+	recNoTrim, err := rNoTrim.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if recNoTrim[0] != "\xef\xbb\xbfid" {
+		t.Errorf("header 0 = %q, want '\xef\xbb\xbfid'", recNoTrim[0])
+	}
+}

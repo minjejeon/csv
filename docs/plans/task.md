@@ -47,6 +47,6 @@
 | Stability & DX: Implementation Planning | Completed | docs/plans/2026-10-07-stability-and-dx-hardening.md |
 | Stability & DX Task 1: Memory & Resource Safety Hardening | Completed | parallel.go, generic.go, record.go, plan.go, setter.go |
 | Stability & DX Task 2: Rich Error Diagnostics (DecodeError) | Completed | decoder.go, csv.go, parallel.go |
-| Stability & DX Task 3: UTF-8 BOM Auto-Stripping & Custom Time Format Tags | In Progress | tag.go, setter.go, getter.go, reader.go, option.go |
-| Stability & DX Task 4: Symmetric Multi-Charset Writer Encoding | Pending | writer.go, encoder.go, csv.go |
+| Stability & DX Task 3: UTF-8 BOM Auto-Stripping & Custom Time Format Tags | Completed | tag.go, setter.go, getter.go, reader.go, option.go |
+| Stability & DX Task 4: Symmetric Multi-Charset Writer Encoding | In Progress | writer.go, encoder.go, csv.go |
 | Stability & DX Task 5: End-to-End Verification, Race Detection & Benchmarks | Pending | Full verification and benchmark validation |

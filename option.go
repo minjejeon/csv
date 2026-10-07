@@ -55,3 +55,11 @@ func WithFieldsPerRecord(n int) Option {
 		r.FieldsPerRecord = n
 	}
 }
+
+// WithTrimBOM specifies whether to automatically detect and strip leading UTF-8 BOM (\xef\xbb\xbf)
+// from the input stream. Defaults to true.
+func WithTrimBOM(trim bool) Option {
+	return func(r *Reader) {
+		r.TrimBOM = trim
+	}
+}

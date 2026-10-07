@@ -104,13 +104,33 @@ func compileGetter(f structFieldInfo) (fieldGetterFunc, error) {
 	omitEmpty := f.tag.omitEmpty
 
 	if f.fieldType == timeType {
+		format := f.tag.format
+		isUnix := strings.EqualFold(format, "unix")
+		isUnixMilli := strings.EqualFold(format, "unixmilli")
+
 		return func(structPtr unsafe.Pointer, w *Writer) error {
 			t := *(*time.Time)(unsafe.Add(structPtr, offset))
 			if t.IsZero() && omitEmpty {
 				return nil
 			}
+			if isUnix {
+				var scratch [32]byte
+				b := strconv.AppendInt(scratch[:0], t.Unix(), 10)
+				w.WriteFieldBytes(b)
+				return nil
+			}
+			if isUnixMilli {
+				var scratch [32]byte
+				b := strconv.AppendInt(scratch[:0], t.UnixMilli(), 10)
+				w.WriteFieldBytes(b)
+				return nil
+			}
+			layout := time.RFC3339
+			if format != "" {
+				layout = resolveTimeFormat(format)
+			}
 			var scratch [64]byte
-			b := t.AppendFormat(scratch[:0], time.RFC3339)
+			b := t.AppendFormat(scratch[:0], layout)
 			w.WriteFieldBytes(b)
 			return nil
 		}, nil

@@ -40,6 +40,8 @@ type Reader struct {
 	FieldsPerRecord  int    // Number of expected fields per record (<0: no check, 0: first row, >0: fixed)
 	LazyQuotes       bool   // Allow bare quotes in unquoted fields
 	TrimLeadingSpace bool   // Trim leading whitespace from fields
+	TrimBOM          bool   // Strip UTF-8 BOM (\xef\xbb\xbf) if present at start (default true)
+	bomChecked       bool
 
 	delimBytes   []byte
 	quoteByte    byte
@@ -100,6 +102,7 @@ func NewReader(r io.Reader, opts ...Option) *Reader {
 		Delimiter:       ",",
 		Quote:           '"',
 		FieldsPerRecord: -1,
+		TrimBOM:         true,
 		r:               r,
 		bufHolder:       bHolder,
 		buf:             *bHolder,
@@ -136,6 +139,7 @@ func (r *Reader) Reset(rd io.Reader) {
 	r.pos = 0
 	r.end = 0
 	r.eof = false
+	r.bomChecked = false
 	r.line = 1
 	r.numFieldsFirst = 0
 	r.recordStart = 0
@@ -252,6 +256,25 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	r.record.spans = r.record.spans[:0]
 	if r.fieldBufHolder != nil {
 		r.fieldBufHolder.buf = r.fieldBufHolder.buf[:0]
+	}
+	// Strip UTF-8 BOM if present at beginning of stream
+	if !r.bomChecked {
+		r.bomChecked = true
+		if r.TrimBOM {
+			for r.end-r.pos < 3 && !r.eof {
+				if _, err := r.ensureMore(); err != nil {
+					return nil, err
+				}
+			}
+			if r.end-r.pos >= 3 &&
+				r.buf[r.pos] == 0xef &&
+				r.buf[r.pos+1] == 0xbb &&
+				r.buf[r.pos+2] == 0xbf {
+				r.pos += 3
+				r.recordStart = r.pos
+				r.currFieldStart = r.pos
+			}
+		}
 	}
 
 	// 1. Skip leading comments and blank lines
