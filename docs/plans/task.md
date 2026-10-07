@@ -40,7 +40,13 @@
 | Serialization Task 3: Multithreaded ParallelMarshal & Generic RecordMarshaler API | Completed | parallel.go, generic.go, parallel_marshal_test.go, generic_marshal_test.go |
 | Serialization Task 4: Round-Trip, Regression & Benchmark Verification | Completed | marshal_bench_test.go: 919 MB/s ParallelMarshal (6.35x vs csvutil), 16 allocs/op, 0 races |
 | Stability & DX: Context Exploration & Codebase Audit | Completed | Comprehensive audit across Reader, Decoder, Writer, Encoder, Pools, and Generics |
-| Stability & DX: Clarifying Questions & User Alignment | In Progress | Align on prioritization of stability fixes and DX enhancements |
-| Stability & DX: 2-3 Architectural Approaches Proposal | Pending | Structured approaches balancing zero-alloc vs safety |
-| Stability & DX: Present Design Sections & Approval | Pending | Section-by-section review |
-| Stability & DX: Write Design Doc & Git Commit | Pending | Save to docs/plans/ |
+| Stability & DX: Clarifying Questions & User Alignment | Completed | Comprehensive Hardening approach approved by user |
+| Stability & DX: 2-3 Architectural Approaches Proposal | Completed | Approach 1 (Integrated Zero-Breakage Hardening) selected |
+| Stability & DX: Present Design Sections & Approval | Completed | All 3 design sections approved by user |
+| Stability & DX: Write Design Doc & Git Commit | Completed | docs/plans/2026-10-07-stability-and-dx-hardening-design.md |
+| Stability & DX: Implementation Planning | Completed | docs/plans/2026-10-07-stability-and-dx-hardening.md |
+| Stability & DX Task 1: Memory & Resource Safety Hardening | Pending | parallel.go, generic.go, pool.go, record.go, plan.go |
+| Stability & DX Task 2: Rich Error Diagnostics (DecodeError) | Pending | decoder.go, csv.go, parallel.go |
+| Stability & DX Task 3: UTF-8 BOM Auto-Stripping & Custom Time Format Tags | Pending | tag.go, setter.go, getter.go, reader.go, option.go |
+| Stability & DX Task 4: Symmetric Multi-Charset Writer Encoding | Pending | writer.go, encoder.go, csv.go |
+| Stability & DX Task 5: End-to-End Verification, Race Detection & Benchmarks | Pending | Full verification and benchmark validation |
