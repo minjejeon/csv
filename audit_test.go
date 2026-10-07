@@ -439,3 +439,73 @@ func TestRecordFieldBoolEmpty(t *testing.T) {
 	}
 }
 
+func TestRecordFieldBoundsAndStrings(t *testing.T) {
+	data := "a,b,c\n10,true,3.14\n"
+	r := NewReader(strings.NewReader(data))
+
+	// Header row
+	header, err := r.ReadRecord()
+	if err != nil {
+		t.Fatal(err)
+	}
+	strs := header.Strings()
+	if len(strs) != 3 || strs[0] != "a" || strs[1] != "b" || strs[2] != "c" {
+		t.Fatalf("Strings() mismatch: got %v", strs)
+	}
+
+	// Data row
+	rec, err := r.ReadRecord()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Valid in-bounds parses
+	intVal, err := rec.FieldInt(0)
+	if err != nil || intVal != 10 {
+		t.Fatalf("FieldInt(0) = %d, %v; want 10, nil", intVal, err)
+	}
+	boolVal, err := rec.FieldBool(1)
+	if err != nil || boolVal != true {
+		t.Fatalf("FieldBool(1) = %v, %v; want true, nil", boolVal, err)
+	}
+	floatVal, err := rec.FieldFloat64(2)
+	if err != nil || floatVal != 3.14 {
+		t.Fatalf("FieldFloat64(2) = %v, %v; want 3.14, nil", floatVal, err)
+	}
+
+	// Out-of-bounds checks should return ErrFieldIndex
+	if _, err := rec.FieldInt(3); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("FieldInt(3) expected ErrFieldIndex, got: %v", err)
+	}
+	if _, err := rec.FieldInt(-1); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("FieldInt(-1) expected ErrFieldIndex, got: %v", err)
+	}
+	if _, err := rec.FieldInt64(5); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("FieldInt64(5) expected ErrFieldIndex, got: %v", err)
+	}
+	if _, err := rec.FieldUint(5); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("FieldUint(5) expected ErrFieldIndex, got: %v", err)
+	}
+	if _, err := rec.FieldUint64(5); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("FieldUint64(5) expected ErrFieldIndex, got: %v", err)
+	}
+	if _, err := rec.FieldBool(3); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("FieldBool(3) expected ErrFieldIndex, got: %v", err)
+	}
+	if _, err := rec.FieldFloat64(3); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("FieldFloat64(3) expected ErrFieldIndex, got: %v", err)
+	}
+	if _, err := rec.FieldFloat32(3); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("FieldFloat32(3) expected ErrFieldIndex, got: %v", err)
+	}
+
+	// Nil record checks
+	var nilRec *Record
+	if nilRec.Strings() != nil {
+		t.Errorf("nilRec.Strings() expected nil, got %v", nilRec.Strings())
+	}
+	if _, err := nilRec.FieldInt(0); !errors.Is(err, ErrFieldIndex) {
+		t.Errorf("nilRec.FieldInt(0) expected ErrFieldIndex, got: %v", err)
+	}
+}
+

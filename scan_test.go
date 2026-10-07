@@ -114,3 +114,39 @@ func TestScanSpecialPrecomputedVectors(t *testing.T) {
 		t.Fatalf("expected 6, got %d", idx)
 	}
 }
+
+func TestScanBlock32Correctness(t *testing.T) {
+	s := newBlockScanner(',', '"')
+
+	naiveScanBlock32 := func(chunk []byte, delim, quote byte) (mD, mQ, mEOL uint32) {
+		for i := 0; i < len(chunk) && i < 32; i++ {
+			b := chunk[i]
+			if b == delim {
+				mD |= 1 << i
+			} else if b == quote {
+				mQ |= 1 << i
+			} else if b == '\r' || b == '\n' {
+				mEOL |= 1 << i
+			}
+		}
+		return
+	}
+
+	r := rand.New(rand.NewSource(12345))
+	allBytes := []byte("abcdefghijklmnopqrstuvwxyz0123456789,\"\r\n\xed\x95\x9c\xea\xb8\x80 \t")
+
+	for run := 0; run < 1000; run++ {
+		chunk := make([]byte, 32)
+		for j := range chunk {
+			chunk[j] = allBytes[r.Intn(len(allBytes))]
+		}
+
+		wantD, wantQ, wantEOL := naiveScanBlock32(chunk, ',', '"')
+		gotD, gotQ, gotEOL := s.scanBlock32(chunk)
+
+		if gotD != wantD || gotQ != wantQ || gotEOL != wantEOL {
+			t.Fatalf("scanBlock32 mismatch on run %d:\nchunk: %q\nwant D=%032b Q=%032b EOL=%032b\ngot  D=%032b Q=%032b EOL=%032b",
+				run, chunk, wantD, wantQ, wantEOL, gotD, gotQ, gotEOL)
+		}
+	}
+}

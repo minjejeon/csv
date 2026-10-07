@@ -95,6 +95,22 @@ func (rec *Record) Clone() *Record {
 	}
 }
 
+// Strings returns all unescaped fields of the record as a string slice.
+func (rec *Record) Strings() []string {
+	if rec == nil {
+		return nil
+	}
+	n := len(rec.spans)
+	if n == 0 {
+		return []string{}
+	}
+	res := make([]string, n)
+	for i := 0; i < n; i++ {
+		res[i] = rec.FieldString(i)
+	}
+	return res
+}
+
 // FieldString returns the unescaped string of field i.
 func (rec *Record) FieldString(i int) string {
 	b := rec.Field(i)
@@ -103,6 +119,9 @@ func (rec *Record) FieldString(i int) string {
 
 // FieldInt parses field i as an int.
 func (rec *Record) FieldInt(i int) (int, error) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
+		return 0, ErrFieldIndex
+	}
 	b := rec.Field(i)
 	if len(b) == 0 {
 		return 0, nil
@@ -113,6 +132,9 @@ func (rec *Record) FieldInt(i int) (int, error) {
 
 // FieldInt64 parses field i as an int64.
 func (rec *Record) FieldInt64(i int) (int64, error) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
+		return 0, ErrFieldIndex
+	}
 	b := rec.Field(i)
 	if len(b) == 0 {
 		return 0, nil
@@ -122,6 +144,9 @@ func (rec *Record) FieldInt64(i int) (int64, error) {
 
 // FieldUint parses field i as a uint.
 func (rec *Record) FieldUint(i int) (uint, error) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
+		return 0, ErrFieldIndex
+	}
 	b := rec.Field(i)
 	if len(b) == 0 {
 		return 0, nil
@@ -132,6 +157,9 @@ func (rec *Record) FieldUint(i int) (uint, error) {
 
 // FieldUint64 parses field i as a uint64.
 func (rec *Record) FieldUint64(i int) (uint64, error) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
+		return 0, ErrFieldIndex
+	}
 	b := rec.Field(i)
 	if len(b) == 0 {
 		return 0, nil
@@ -141,6 +169,9 @@ func (rec *Record) FieldUint64(i int) (uint64, error) {
 
 // FieldBool parses field i as a boolean.
 func (rec *Record) FieldBool(i int) (bool, error) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
+		return false, ErrFieldIndex
+	}
 	b := rec.Field(i)
 	if len(b) == 0 {
 		return false, nil
@@ -150,6 +181,9 @@ func (rec *Record) FieldBool(i int) (bool, error) {
 
 // FieldFloat64 parses field i as a float64.
 func (rec *Record) FieldFloat64(i int) (float64, error) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
+		return 0, ErrFieldIndex
+	}
 	b := rec.Field(i)
 	if len(b) == 0 {
 		return 0, nil
@@ -160,6 +194,9 @@ func (rec *Record) FieldFloat64(i int) (float64, error) {
 
 // FieldFloat32 parses field i as a float32.
 func (rec *Record) FieldFloat32(i int) (float32, error) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
+		return 0, ErrFieldIndex
+	}
 	b := rec.Field(i)
 	if len(b) == 0 {
 		return 0, nil

@@ -83,3 +83,23 @@ func TestGenericParallelMarshalSlice(t *testing.T) {
 		t.Fatalf("expected 1001 lines, got %d", len(lines))
 	}
 }
+
+func TestGenericMarshalSliceEmptyWithHeaderProvider(t *testing.T) {
+	var empty []TestGenericItem
+	data, err := MarshalSlice[TestGenericItem, *TestGenericItem](empty)
+	if err != nil {
+		t.Fatalf("MarshalSlice failed: %v", err)
+	}
+	expected := "id,name\n"
+	if string(data) != expected {
+		t.Errorf("MarshalSlice(empty) = %q; want %q", string(data), expected)
+	}
+
+	parData, err := ParallelMarshalSlice[TestGenericItem, *TestGenericItem](empty)
+	if err != nil {
+		t.Fatalf("ParallelMarshalSlice failed: %v", err)
+	}
+	if string(parData) != expected {
+		t.Errorf("ParallelMarshalSlice(empty) = %q; want %q", string(parData), expected)
+	}
+}

@@ -492,6 +492,18 @@ func compileGetter(f structFieldInfo) (fieldGetterFunc, error) {
 			}
 			return nil
 		}, nil
+
+	case reflect.Slice:
+		if f.fieldType.Elem().Kind() == reflect.Uint8 {
+			return func(structPtr unsafe.Pointer, w *Writer) error {
+				b := *(*[]byte)(unsafe.Add(structPtr, offset))
+				if len(b) == 0 && omitEmpty {
+					return nil
+				}
+				w.WriteFieldBytes(b)
+				return nil
+			}, nil
+		}
 	}
 
 	return nil, fmt.Errorf("csv: unsupported field type %v", f.fieldType)

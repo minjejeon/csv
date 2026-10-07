@@ -90,12 +90,27 @@ func (s *blockScanner) scanSpecial(data []byte) int {
 }
 
 func (s *blockScanner) scanBlock32(chunk []byte) (maskDelim, maskQuote, maskEOL uint32) {
-	// Fallback to byte check for other architectures if not 32-byte native
-	for i := 0; i < len(chunk) && i < 32; i++ {
+	if len(chunk) < 32 {
+		for i := 0; i < len(chunk); i++ {
+			b := chunk[i]
+			if b == s.delim {
+				maskDelim |= 1 << i
+			} else if b == s.quote {
+				maskQuote |= 1 << i
+			} else if b == '\r' || b == '\n' {
+				maskEOL |= 1 << i
+			}
+		}
+		return maskDelim, maskQuote, maskEOL
+	}
+	_ = chunk[31]
+	d := s.delim
+	q := s.quote
+	for i := 0; i < 32; i++ {
 		b := chunk[i]
-		if b == s.delim {
+		if b == d {
 			maskDelim |= 1 << i
-		} else if b == s.quote {
+		} else if b == q {
 			maskQuote |= 1 << i
 		} else if b == '\r' || b == '\n' {
 			maskEOL |= 1 << i

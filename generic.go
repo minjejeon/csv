@@ -267,8 +267,26 @@ func MarshalSlice[T any, PT interface {
 	RecordMarshaler
 }](slice []T, opts ...any) ([]byte, error) {
 	n := len(slice)
+	var zero T
+	var header []string
+	if hp, ok := any(PT(&zero)).(HeaderProvider); ok {
+		header = hp.CSVHeader()
+	}
+
 	if n == 0 {
-		return nil, nil
+		if len(header) == 0 {
+			return nil, nil
+		}
+		var buf bytes.Buffer
+		w := NewWriter(&buf, opts...)
+		defer w.Close()
+		if err := w.Write(header); err != nil {
+			return nil, err
+		}
+		if err := w.Flush(); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
 	}
 
 	var buf bytes.Buffer
@@ -276,9 +294,8 @@ func MarshalSlice[T any, PT interface {
 	w := NewWriter(&buf, opts...)
 	defer w.Close()
 
-	var zero T
-	if hp, ok := any(PT(&zero)).(HeaderProvider); ok {
-		if err := w.Write(hp.CSVHeader()); err != nil {
+	if len(header) > 0 {
+		if err := w.Write(header); err != nil {
 			return nil, err
 		}
 	}
@@ -307,7 +324,7 @@ func ParallelMarshalSlice[T any, PT interface {
 }](slice []T, opts ...any) ([]byte, error) {
 	n := len(slice)
 	if n == 0 {
-		return nil, nil
+		return MarshalSlice[T, PT](slice, opts...)
 	}
 
 	parOpts, otherOpts := parseParallelAndWriterOpts(opts)

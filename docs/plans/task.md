@@ -55,4 +55,9 @@
 | Audit Task 3: Struct Decoder Reused Struct Clearing & Duplicate Header Mapping | Completed | plan.go, decoder.go, getter.go, decoder_test.go, unique_test.go |
 | Audit Task 4: Reader DuckDB Fast-Path Quote Optimization & Pool/API Hardening | Completed | reader.go, pool.go, generic.go, record.go, audit_test.go |
 | Audit Task 5: End-to-End Verification, Race Detector & Fuzz Testing | Completed | Full verification across standard & SIMD, fuzzers |
+| Post-Audit Task 1: Record.Field* Bounds Checking & Record.Strings() Helper | Completed | record.go, reader.go, audit_test.go |
+| Post-Audit Task 2: Generic MarshalSlice Empty Slice Header Emission | Completed | generic.go, generic_marshal_test.go |
+| Post-Audit Task 3: Struct Field []byte Support in Setter, Getter & Plan | Completed | setter.go, getter.go, plan.go, marshal_test.go |
+| Post-Audit Task 4: Fallback scanBlock32 Optimization | Completed | scan_fallback.go, scan_simd_other.go, scan_test.go |
+| Post-Audit Task 5: Full Verification, Race Detector & Commit | Completed | Test suites, benchmarks, git |
 

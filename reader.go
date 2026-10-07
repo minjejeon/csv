@@ -15,6 +15,7 @@ var (
 	ErrBareQuote  = errors.New("bare \" in non-quoted-field")
 	ErrQuote      = errors.New("extraneous or missing \" in quoted-field")
 	ErrFieldCount = errors.New("wrong number of fields")
+	ErrFieldIndex = errors.New("csv: field index out of range")
 )
 
 type ParseError struct {
@@ -702,12 +703,7 @@ func (r *Reader) Read() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := rec.NumFields()
-	res := make([]string, n)
-	for i := 0; i < n; i++ {
-		res[i] = string(rec.Field(i))
-	}
-	return res, nil
+	return rec.Strings(), nil
 }
 
 // ReadAll reads all the remaining records from r.

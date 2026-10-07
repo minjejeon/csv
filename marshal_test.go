@@ -125,3 +125,53 @@ func TestMarshalCustomDelimQuote(t *testing.T) {
 	}
 }
 
+func TestByteSliceFieldMarshalAndUnmarshal(t *testing.T) {
+	type Document struct {
+		ID       int     `csv:"id"`
+		RawData  []byte  `csv:"raw_data"`
+		Optional []byte  `csv:"optional,omitempty"`
+		PtrData  *[]byte `csv:"ptr_data,omitempty"`
+	}
+
+	ptr := []byte("pointer-bytes")
+	docs := []Document{
+		{
+			ID:       1,
+			RawData:  []byte("hello world"),
+			Optional: []byte("extra"),
+			PtrData:  &ptr,
+		},
+		{
+			ID:       2,
+			RawData:  []byte("second line"),
+			Optional: nil,
+			PtrData:  nil,
+		},
+	}
+
+	// 1. Test Marshal
+	data, err := Marshal(docs)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	expected := "id,raw_data,optional,ptr_data\n1,hello world,extra,pointer-bytes\n2,second line,,\n"
+	if string(data) != expected {
+		t.Fatalf("Marshal mismatch:\ngot:  %s\nwant: %s", string(data), expected)
+	}
+
+	// 2. Test Unmarshal
+	var parsed []Document
+	if err := Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if len(parsed) != 2 {
+		t.Fatalf("expected 2 parsed documents, got %d", len(parsed))
+	}
+	if string(parsed[0].RawData) != "hello world" || string(parsed[0].Optional) != "extra" || parsed[0].PtrData == nil || string(*parsed[0].PtrData) != "pointer-bytes" {
+		t.Errorf("doc 0 mismatch: %+v", parsed[0])
+	}
+	if string(parsed[1].RawData) != "second line" || len(parsed[1].Optional) != 0 || parsed[1].PtrData != nil {
+		t.Errorf("doc 1 mismatch: %+v", parsed[1])
+	}
+}
+

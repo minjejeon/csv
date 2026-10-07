@@ -202,6 +202,10 @@ func compileZeroer(t reflect.Type, offset uintptr) func(structPtr unsafe.Pointer
 		return func(structPtr unsafe.Pointer) {
 			*(*unsafe.Pointer)(unsafe.Add(structPtr, offset)) = nil
 		}
+	case reflect.Slice:
+		return func(structPtr unsafe.Pointer) {
+			*(*[]byte)(unsafe.Add(structPtr, offset)) = nil
+		}
 	default:
 		zeroVal := reflect.Zero(t)
 		return func(structPtr unsafe.Pointer) {

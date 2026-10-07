@@ -1,6 +1,7 @@
 package csv
 
 import (
+	"bytes"
 	"encoding"
 	"fmt"
 	"math"
@@ -773,6 +774,23 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 			*(*bool)(unsafe.Add(structPtr, offset)) = v
 			return nil
 		}, nil
+
+	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return func(structPtr unsafe.Pointer, raw []byte) error {
+				if len(raw) == 0 {
+					if tag.omitEmpty {
+						*(*[]byte)(unsafe.Add(structPtr, offset)) = nil
+						return nil
+					}
+					*(*[]byte)(unsafe.Add(structPtr, offset)) = []byte{}
+					return nil
+				}
+				*(*[]byte)(unsafe.Add(structPtr, offset)) = bytes.Clone(raw)
+				return nil
+			}, nil
+		}
+		return nil, fmt.Errorf("csv: unsupported field type %v", t)
 
 	case reflect.Pointer:
 		elemType := t.Elem()
