@@ -279,11 +279,15 @@ func MarshalSlice[T any, PT interface {
 		}
 		var buf bytes.Buffer
 		w := NewWriter(&buf, opts...)
-		defer w.Close()
 		if err := w.Write(header); err != nil {
+			_ = w.Close()
 			return nil, err
 		}
 		if err := w.Flush(); err != nil {
+			_ = w.Close()
+			return nil, err
+		}
+		if err := w.Close(); err != nil {
 			return nil, err
 		}
 		return buf.Bytes(), nil
@@ -292,7 +296,6 @@ func MarshalSlice[T any, PT interface {
 	var buf bytes.Buffer
 	buf.Grow(n * 64)
 	w := NewWriter(&buf, opts...)
-	defer w.Close()
 
 	if len(header) > 0 {
 		if err := w.Write(header); err != nil {

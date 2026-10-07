@@ -64,4 +64,8 @@
 | Source Audit Task 2: Synthesize Findings, Categorize Severity & Triage Fixes | Completed | 13 issues empirically reproduced & verified in audit_repro_test.go |
 | Source Audit Task 3: Implement Fixes & Hardening for Identified Issues | Completed | Systematic patches across getter, setter, plan, tag, reader, parallel |
 | Source Audit Task 4: Verification, Race Detector, Regression Tests & Report | Completed | Standard, SIMD, Race, Benchmarks (All 13 repro tests & full suite pass) |
+| Source Audit R2 Task 1: Dispatch 4 Subagents for Deep Secondary Codebase Audit | Completed | Reader/Scanner, Decoder/Plan, Writer/Encoder, Concurrency/Generics |
+| Source Audit R2 Task 2: Synthesize Round 2 Findings & Empirical Reproduction | Completed | 4 new edge cases reproduced & verified in audit_repro_test.go |
+| Source Audit R2 Task 3: Implement Fixes & Hardening for Confirmed Issues | Completed | tag, getter, writer, generic, reader, encoder, plan |
+| Source Audit R2 Task 4: Full Verification, Race Detector, Benchmarks & Push | Completed | 17/17 repro tests pass, 0 data races, 438 MB/s zero-alloc |
 

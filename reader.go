@@ -682,20 +682,17 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	}
 
 	numFields := len(r.record.spans)
-	if r.FieldsPerRecord > 0 {
-		if numFields != r.FieldsPerRecord {
-			return nil, &ParseError{Line: recordLine, Err: ErrFieldCount}
-		}
-	} else if r.FieldsPerRecord == 0 {
-		if r.numFieldsFirst == 0 {
-			r.numFieldsFirst = numFields
-		} else if numFields != r.numFieldsFirst {
-			return nil, &ParseError{Line: recordLine, Err: ErrFieldCount}
-		}
-	}
-
 	r.record.raw = r.buf
 	r.record.line = recordLine
+
+	if r.FieldsPerRecord > 0 {
+		if numFields != r.FieldsPerRecord {
+			return &r.record, &ParseError{Line: recordLine, Err: ErrFieldCount}
+		}
+	} else if r.FieldsPerRecord == 0 {
+		r.FieldsPerRecord = numFields
+	}
+
 	return &r.record, nil
 }
 
@@ -703,6 +700,9 @@ func (r *Reader) ReadRecord() (*Record, error) {
 func (r *Reader) Read() ([]string, error) {
 	rec, err := r.ReadRecord()
 	if err != nil {
+		if errors.Is(err, ErrFieldCount) && rec != nil {
+			return rec.Strings(), err
+		}
 		return nil, err
 	}
 	return rec.Strings(), nil
@@ -806,20 +806,17 @@ func (r *Reader) readRecordFastNoQuote(recordLine int) (*Record, bool, error) {
 			r.line++
 
 			numFields := len(r.record.spans)
-			if r.FieldsPerRecord > 0 {
-				if numFields != r.FieldsPerRecord {
-					return nil, true, &ParseError{Line: recordLine, Err: ErrFieldCount}
-				}
-			} else if r.FieldsPerRecord == 0 {
-				if r.numFieldsFirst == 0 {
-					r.numFieldsFirst = numFields
-				} else if numFields != r.numFieldsFirst {
-					return nil, true, &ParseError{Line: recordLine, Err: ErrFieldCount}
-				}
-			}
-
 			r.record.raw = r.buf
 			r.record.line = recordLine
+
+			if r.FieldsPerRecord > 0 {
+				if numFields != r.FieldsPerRecord {
+					return &r.record, true, &ParseError{Line: recordLine, Err: ErrFieldCount}
+				}
+			} else if r.FieldsPerRecord == 0 {
+				r.FieldsPerRecord = numFields
+			}
+
 			return &r.record, true, nil
 		}
 

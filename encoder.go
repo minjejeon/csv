@@ -67,11 +67,15 @@ func (enc *Encoder) Encode(v any) error {
 		newVal.Set(val)
 		structPtr = newVal.Addr().UnsafePointer()
 	}
+	startLen := len(enc.w.buf)
 	for i, f := range enc.plan.fields {
 		if i > 0 {
 			enc.w.WriteDelimiter()
 		}
 		if err := f.getter(structPtr, enc.w); err != nil {
+			if len(enc.w.buf) >= startLen {
+				enc.w.buf = enc.w.buf[:startLen]
+			}
 			return fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
 		}
 	}

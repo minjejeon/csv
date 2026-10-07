@@ -87,7 +87,9 @@ func collectStructFieldsInternal(t reflect.Type, baseOffset uintptr, baseIndex [
 
 		if f.Anonymous || tag.inline {
 			ft := f.Type
-			isSpecial := ft == timeType || ft.Implements(textMarshalerType) || reflect.PointerTo(ft).Implements(textMarshalerType)
+			isSpecial := ft == timeType ||
+				ft.Implements(textMarshalerType) || reflect.PointerTo(ft).Implements(textMarshalerType) ||
+				ft.Implements(textUnmarshalerType) || reflect.PointerTo(ft).Implements(textUnmarshalerType)
 			if !isSpecial && ft.Kind() == reflect.Struct {
 				embedded := collectStructFieldsInternal(ft, currOffset, currIndex, ptrOffsets, depth+1, newVisited)
 				fields = append(fields, embedded...)

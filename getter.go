@@ -4,7 +4,6 @@ import (
 	"encoding"
 	"fmt"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,9 +55,17 @@ func getTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
 
 func buildTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
 	fieldInfos := collectStructFields(t, 0, nil, nil)
-	sort.SliceStable(fieldInfos, func(i, j int) bool {
-		return fieldInfos[i].depth < fieldInfos[j].depth
-	})
+
+	minDepth := make(map[string]int)
+	for _, fi := range fieldInfos {
+		colName := fi.name
+		if fi.tag.name != "" {
+			colName = fi.tag.name
+		}
+		if d, ok := minDepth[colName]; !ok || fi.depth < d {
+			minDepth[colName] = fi.depth
+		}
+	}
 
 	usedNames := make(map[string]bool)
 	var filtered []structFieldInfo
@@ -67,11 +74,10 @@ func buildTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
 		if fi.tag.name != "" {
 			colName = fi.tag.name
 		}
-		if usedNames[colName] {
-			continue
+		if fi.depth == minDepth[colName] && !usedNames[colName] {
+			usedNames[colName] = true
+			filtered = append(filtered, fi)
 		}
-		usedNames[colName] = true
-		filtered = append(filtered, fi)
 	}
 
 	plan := &typeMarshalPlan{

@@ -48,13 +48,44 @@ func parseTag(tagStr string) csvTag {
 	var parts []string
 	var current strings.Builder
 	inFormat := false
+	inQuote := byte(0)
+
 	for i := 0; i < len(tagStr); i++ {
 		c := tagStr[i]
-		if c == ',' && !inFormat {
+		if inQuote != 0 {
+			if c == inQuote {
+				inQuote = 0
+			}
+			current.WriteByte(c)
+			continue
+		}
+		if c == '"' || c == '\'' {
+			inQuote = c
+			current.WriteByte(c)
+			continue
+		}
+
+		if c == ',' {
+			if inFormat {
+				rest := strings.TrimSpace(tagStr[i+1:])
+				if rest == "omitempty" || strings.HasPrefix(rest, "omitempty,") ||
+					rest == "inline" || strings.HasPrefix(rest, "inline,") ||
+					rest == "unique" || strings.HasPrefix(rest, "unique,") ||
+					rest == "intern" || strings.HasPrefix(rest, "intern,") ||
+					strings.HasPrefix(rest, "format:") || strings.HasPrefix(rest, "format=") {
+					parts = append(parts, current.String())
+					current.Reset()
+					inFormat = false
+					continue
+				}
+				current.WriteByte(c)
+				continue
+			}
 			parts = append(parts, current.String())
 			current.Reset()
 			continue
 		}
+
 		current.WriteByte(c)
 		s := current.String()
 		trimmed := strings.TrimSpace(s)
@@ -79,9 +110,9 @@ func parseTag(tagStr string) csvTag {
 		case opt == "unique" || opt == "intern":
 			tag.unique = true
 		case strings.HasPrefix(opt, "format="):
-			tag.format = strings.TrimPrefix(opt, "format=")
+			tag.format = strings.Trim(strings.TrimPrefix(opt, "format="), "\"'")
 		case strings.HasPrefix(opt, "format:"):
-			tag.format = strings.TrimPrefix(opt, "format:")
+			tag.format = strings.Trim(strings.TrimPrefix(opt, "format:"), "\"'")
 		}
 	}
 	return tag

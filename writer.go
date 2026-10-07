@@ -117,6 +117,9 @@ func (w *Writer) Error() error {
 
 // Flush writes any buffered data to the underlying io.Writer.
 func (w *Writer) Flush() error {
+	if w.err != nil {
+		return w.err
+	}
 	if len(w.buf) == 0 {
 		return nil
 	}
@@ -139,6 +142,10 @@ func (w *Writer) Close() error {
 		if terr := w.transformW.Close(); terr != nil && err == nil {
 			err = terr
 		}
+		w.transformW = nil
+	}
+	if err == nil {
+		err = w.err
 	}
 	if err != nil && w.err == nil {
 		w.err = err

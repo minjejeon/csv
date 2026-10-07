@@ -2,6 +2,7 @@ package csv
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -257,5 +258,72 @@ func TestRepro_PointerTextMarshaler(t *testing.T) {
 	t.Logf("Result: %s", string(data))
 	if !strings.Contains(string(data), "active") {
 		t.Errorf("FAIL: *customStatus was serialized to empty string! got: %q", string(data))
+	}
+}
+
+// 14. parseTag greedy format consuming subsequent options
+func TestRepro_R2_FormatTagWithOmitempty(t *testing.T) {
+	tag := parseTag("ts,format:2006-01-02,omitempty")
+	if tag.format != "2006-01-02" {
+		t.Errorf("FAIL: tag.format was corrupted by subsequent options: got %q, want '2006-01-02'", tag.format)
+	}
+	if !tag.omitEmpty {
+		t.Errorf("FAIL: tag.omitEmpty was lost due to greedy format parsing!")
+	}
+}
+
+// 15. Field order preservation in embedded struct serialization
+func TestRepro_R2_EmbeddedStructFieldOrder(t *testing.T) {
+	type Base struct {
+		ID int `csv:"id"`
+	}
+	type Record struct {
+		Base
+		Name string `csv:"name"`
+	}
+
+	data, err := Marshal([]Record{{Base: Base{ID: 1}, Name: "Alice"}})
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+	expected := "id,name\n1,Alice\n"
+	if string(data) != expected {
+		t.Errorf("FAIL: Embedded struct reordered fields! got %q, want %q", string(data), expected)
+	}
+}
+
+// 16. Writer.Close error masking
+func TestRepro_R2_WriterCloseErrorMasking(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	// Force sticky error
+	w.err = errors.New("sticky write error")
+	err := w.Close()
+	if err == nil {
+		t.Errorf("FAIL: w.Close() masked sticky error and returned nil!")
+	}
+}
+
+// 17. FieldsPerRecord partial record return on ErrFieldCount
+func TestRepro_R2_FieldsPerRecordPartialReturn(t *testing.T) {
+	r := NewReader(strings.NewReader("a,b,c\n1,2\n"))
+	r.FieldsPerRecord = 3
+
+	// First row (3 fields)
+	rec1, err := r.Read()
+	if err != nil {
+		t.Fatalf("row 1 error: %v", err)
+	}
+	if len(rec1) != 3 {
+		t.Fatalf("row 1 expected 3 fields, got %d", len(rec1))
+	}
+
+	// Second row (2 fields) -> should return partial record AND ErrFieldCount
+	rec2, err := r.Read()
+	if !errors.Is(err, ErrFieldCount) {
+		t.Fatalf("expected ErrFieldCount, got %v", err)
+	}
+	if len(rec2) != 2 {
+		t.Errorf("FAIL: Read() returned nil or empty record on ErrFieldCount! got %v", rec2)
 	}
 }
