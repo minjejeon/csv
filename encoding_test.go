@@ -107,3 +107,84 @@ func TestEncodingParallelUnmarshal(t *testing.T) {
 		t.Errorf("emp 0 mismatch: %+v", emps[0])
 	}
 }
+
+func TestWriterEncodingEUCKR(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf, WithCharset("euc-kr"))
+	err := w.Write([]string{"이름", "직급"})
+	if err != nil {
+		t.Fatalf("Write header failed: %v", err)
+	}
+	err = w.Write([]string{"홍길동", "개발자"})
+	if err != nil {
+		t.Fatalf("Write record failed: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	written := buf.Bytes()
+	// Read back using EUC-KR Reader
+	r := NewReader(bytes.NewReader(written), WithCharset("euc-kr"))
+	rows, err := r.ReadAll()
+	if err != nil {
+		t.Fatalf("Reader failed: %v", err)
+	}
+	if len(rows) != 2 || rows[0][0] != "이름" || rows[1][0] != "홍길동" {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+
+	// Verify the written bytes are indeed valid EUC-KR and NOT plain UTF-8
+	if bytes.Contains(written, []byte("홍길동")) {
+		t.Errorf("expected written bytes to be EUC-KR, but contains raw UTF-8!")
+	}
+}
+
+func TestMarshalEncodingShiftJIS(t *testing.T) {
+	emps := []EmployeeKorean{
+		{ID: 1, Name: "田中太郎", Dept: "営業部"},
+	}
+	data, err := Marshal(emps, WithCharset("shift_jis"))
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	// Read back using Shift_JIS Unmarshal
+	var roundTrip []EmployeeKorean
+	err = Unmarshal(data, &roundTrip, WithCharset("shift_jis"))
+	if err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if len(roundTrip) != 1 || roundTrip[0].Name != "田中太郎" || roundTrip[0].Dept != "営業部" {
+		t.Fatalf("roundTrip mismatch: %+v", roundTrip)
+	}
+
+	// Verify written bytes are Shift_JIS not UTF-8
+	if bytes.Contains(data, []byte("田中太郎")) {
+		t.Errorf("expected data to be Shift_JIS, but contains raw UTF-8!")
+	}
+}
+
+func TestParallelMarshalEncodingEUCKR(t *testing.T) {
+	var emps []EmployeeKorean
+	for i := 1; i <= 50; i++ {
+		emps = append(emps, EmployeeKorean{ID: i, Name: "홍길동", Dept: "개발팀"})
+	}
+	data, err := ParallelMarshal(emps, WithCharset("euc-kr"))
+	if err != nil {
+		t.Fatalf("ParallelMarshal failed: %v", err)
+	}
+
+	var roundTrip []EmployeeKorean
+	err = ParallelUnmarshal(data, &roundTrip, WithCharset("euc-kr"))
+	if err != nil {
+		t.Fatalf("ParallelUnmarshal failed: %v", err)
+	}
+
+	if len(roundTrip) != 50 {
+		t.Fatalf("expected 50 emps, got %d", len(roundTrip))
+	}
+	if roundTrip[0].Name != "홍길동" || roundTrip[49].Dept != "개발팀" {
+		t.Errorf("roundTrip mismatch: %+v", roundTrip[0])
+	}
+}

@@ -3,6 +3,9 @@ package csv
 import (
 	"bytes"
 	"io"
+
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/transform"
 )
 
 // Writer writes records to a CSV-encoded output stream.
@@ -13,6 +16,8 @@ type Writer struct {
 	UseCRLF   bool   // True to use \r\n as the line terminator
 
 	w          io.Writer
+	transformW *transform.Writer
+	encoding   encoding.Encoding
 	bufHolder  *[]byte
 	buf        []byte
 	delimBytes []byte
@@ -57,6 +62,8 @@ func NewWriter(w io.Writer, opts ...any) *Writer {
 		switch fn := opt.(type) {
 		case func(*Writer):
 			fn(writer)
+		case encoding.Encoding:
+			writer.encoding = fn
 		case Option:
 			var r Reader
 			fn(&r)
@@ -69,7 +76,15 @@ func NewWriter(w io.Writer, opts ...any) *Writer {
 			if r.Quote != 0 {
 				writer.Quote = r.Quote
 			}
+			if r.encoding != nil {
+				writer.encoding = r.encoding
+			}
 		}
+	}
+
+	if writer.encoding != nil && writer.w != nil {
+		writer.transformW = transform.NewWriter(writer.w, writer.encoding.NewEncoder())
+		writer.w = writer.transformW
 	}
 
 	writer.initDelimAndQuote()
@@ -93,6 +108,11 @@ func (w *Writer) Flush() error {
 // Close flushes buffered data and returns pooled memory buffers.
 func (w *Writer) Close() error {
 	err := w.Flush()
+	if w.transformW != nil {
+		if terr := w.transformW.Close(); terr != nil && err == nil {
+			err = terr
+		}
+	}
 	if w.bufHolder != nil {
 		*w.bufHolder = w.buf
 		releaseWriteBuf(w.bufHolder)
