@@ -271,3 +271,41 @@ func TestGB2312Encoding(t *testing.T) {
 		t.Fatalf("GB2312 decoded improperly: got %+v, want '你好'", rows)
 	}
 }
+
+func TestRecordClone(t *testing.T) {
+	csvData := "1,\"Alice \"\"The Boss\"\"\",100\n2,\"Bob\",200\n"
+	r := NewReader(strings.NewReader(csvData))
+
+	rec1, err := r.ReadRecord()
+	if err != nil {
+		t.Fatalf("ReadRecord failed: %v", err)
+	}
+
+	cloned1 := rec1.Clone()
+
+	// Read next record, which overwrites r's internal buffers
+	rec2, err := r.ReadRecord()
+	if err != nil {
+		t.Fatalf("ReadRecord row 2 failed: %v", err)
+	}
+
+	// Close reader completely to release all pool buffers
+	_ = r.Close()
+
+	// rec2 is from closed reader, but cloned1 must still be 100% valid
+	if cloned1.NumFields() != 3 {
+		t.Fatalf("cloned1 NumFields = %d, want 3", cloned1.NumFields())
+	}
+	if got := cloned1.FieldString(0); got != "1" {
+		t.Errorf("cloned1 field 0 = %q, want '1'", got)
+	}
+	if got := cloned1.FieldString(1); got != "Alice \"The Boss\"" {
+		t.Errorf("cloned1 field 1 = %q, want 'Alice \"The Boss\"'", got)
+	}
+	v, err := cloned1.FieldInt(2)
+	if err != nil || v != 100 {
+		t.Errorf("cloned1 field 2 = %d (err: %v), want 100", v, err)
+	}
+
+	_ = rec2
+}

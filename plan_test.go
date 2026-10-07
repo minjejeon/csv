@@ -106,3 +106,57 @@ func TestTypePlanCache(t *testing.T) {
 		t.Fatal("expected cached plan pointer to be identical")
 	}
 }
+
+type embeddedPtrUser struct {
+	*sampleUser
+	Role string `csv:"user_role"`
+}
+
+func TestEmbeddedPointerTypePlan(t *testing.T) {
+	typ := reflect.TypeOf(embeddedPtrUser{})
+	headers := []string{"user_role", "user_id"}
+
+	plan, err := getTypePlan(typ, headers)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(plan.fields) != 2 {
+		t.Fatalf("expected 2 mapped fields, got %d", len(plan.fields))
+	}
+}
+
+func TestEmbeddedPointerUnmarshalAndMarshal(t *testing.T) {
+	data := "user_role,user_id,username\nadmin,42,alice\n"
+	var users []embeddedPtrUser
+	if err := Unmarshal([]byte(data), &users); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(users) != 1 {
+		t.Fatalf("expected 1 user, got %d", len(users))
+	}
+	u := users[0]
+	if u.Role != "admin" {
+		t.Errorf("Role = %q, want admin", u.Role)
+	}
+	if u.sampleUser == nil {
+		t.Fatalf("sampleUser is nil!")
+	}
+	if u.ID != 42 || u.Name != "alice" {
+		t.Errorf("embedded sampleUser = %+v, want ID=42, Name=alice", u.sampleUser)
+	}
+
+	// Test Marshal round-trip
+	out, err := Marshal(users)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	var roundTrip []embeddedPtrUser
+	if err := Unmarshal(out, &roundTrip); err != nil {
+		t.Fatalf("Unmarshal round-trip failed: %v", err)
+	}
+	if len(roundTrip) != 1 || roundTrip[0].ID != 42 || roundTrip[0].Role != "admin" {
+		t.Fatalf("round-trip mismatch: %+v", roundTrip)
+	}
+}

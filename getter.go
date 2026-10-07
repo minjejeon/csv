@@ -54,7 +54,7 @@ func getTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
 }
 
 func buildTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
-	fieldInfos := collectStructFields(t, 0, nil)
+	fieldInfos := collectStructFields(t, 0, nil, nil)
 	plan := &typeMarshalPlan{
 		structType: t,
 		fields:     make([]fieldGetterPlan, 0, len(fieldInfos)),
@@ -70,6 +70,21 @@ func buildTypeMarshalPlan(t reflect.Type) (*typeMarshalPlan, error) {
 		getter, err := compileGetter(fi)
 		if err != nil {
 			return nil, fmt.Errorf("csv: failed compiling getter for field %s: %w", fi.name, err)
+		}
+		if len(fi.ptrOffsets) > 0 {
+			pos := fi.ptrOffsets
+			innerGetter := getter
+			getter = func(structPtr unsafe.Pointer, w *Writer) error {
+				curr := structPtr
+				for _, po := range pos {
+					ptrLoc := *(*unsafe.Pointer)(unsafe.Add(curr, po.offset))
+					if ptrLoc == nil {
+						return nil
+					}
+					curr = ptrLoc
+				}
+				return innerGetter(curr, w)
+			}
 		}
 
 		plan.fields = append(plan.fields, fieldGetterPlan{

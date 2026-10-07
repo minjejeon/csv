@@ -36,10 +36,50 @@ func (rec *Record) Field(i int) []byte {
 	}
 	s := &rec.spans[i]
 	raw := rec.raw[s.start:s.end]
-	if !s.hasEscapes {
+	if !s.hasEscapes || rec.r == nil {
 		return raw
 	}
 	return rec.r.unescapeSpan(s, raw)
+}
+
+// Clone returns a detached, independent copy of the Record.
+// The returned Record owns its own backing buffer, does not reference
+// the Reader's sliding or scratch buffers, and remains valid even after
+// subsequent calls to ReadRecord or Reader.Close.
+func (rec *Record) Clone() *Record {
+	if rec == nil {
+		return nil
+	}
+	n := len(rec.spans)
+	if n == 0 {
+		return &Record{}
+	}
+
+	totalSize := 0
+	for i := 0; i < n; i++ {
+		totalSize += len(rec.Field(i))
+	}
+
+	clonedRaw := make([]byte, 0, totalSize)
+	clonedSpans := make([]fieldSpan, n)
+
+	for i := 0; i < n; i++ {
+		f := rec.Field(i)
+		start := len(clonedRaw)
+		clonedRaw = append(clonedRaw, f...)
+		clonedSpans[i] = fieldSpan{
+			start:       uint32(start),
+			end:         uint32(len(clonedRaw)),
+			hasEscapes:  false,
+			isUnescaped: false,
+		}
+	}
+
+	return &Record{
+		r:     nil,
+		raw:   clonedRaw,
+		spans: clonedSpans,
+	}
 }
 
 // FieldString returns the unescaped string of field i.

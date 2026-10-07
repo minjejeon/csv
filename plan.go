@@ -33,15 +33,21 @@ type planKey struct {
 
 var planCache sync.Map
 
-type structFieldInfo struct {
-	name      string
-	offset    uintptr
-	index     []int
-	fieldType reflect.Type
-	tag       csvTag
+type ptrOffset struct {
+	offset uintptr
+	typ    reflect.Type
 }
 
-func collectStructFields(t reflect.Type, baseOffset uintptr, baseIndex []int) []structFieldInfo {
+type structFieldInfo struct {
+	name       string
+	offset     uintptr
+	index      []int
+	fieldType  reflect.Type
+	tag        csvTag
+	ptrOffsets []ptrOffset
+}
+
+func collectStructFields(t reflect.Type, baseOffset uintptr, baseIndex []int, ptrOffsets []ptrOffset) []structFieldInfo {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -64,21 +70,40 @@ func collectStructFields(t reflect.Type, baseOffset uintptr, baseIndex []int) []
 		currOffset := baseOffset + f.Offset
 		currIndex := append(slicesClone(baseIndex), f.Index...)
 
-		if f.Anonymous && f.Type.Kind() == reflect.Struct {
-			embedded := collectStructFields(f.Type, currOffset, currIndex)
-			fields = append(fields, embedded...)
-			continue
+		if f.Anonymous {
+			ft := f.Type
+			if ft.Kind() == reflect.Struct {
+				embedded := collectStructFields(ft, currOffset, currIndex, ptrOffsets)
+				fields = append(fields, embedded...)
+				continue
+			} else if ft.Kind() == reflect.Pointer && ft.Elem().Kind() == reflect.Struct {
+				subType := ft.Elem()
+				newPtrOffsets := append(slicesClonePtrOffsets(ptrOffsets), ptrOffset{offset: currOffset, typ: subType})
+				embedded := collectStructFields(subType, 0, currIndex, newPtrOffsets)
+				fields = append(fields, embedded...)
+				continue
+			}
 		}
 
 		fields = append(fields, structFieldInfo{
-			name:      f.Name,
-			offset:    currOffset,
-			index:     currIndex,
-			fieldType: f.Type,
-			tag:       tag,
+			name:       f.Name,
+			offset:     currOffset,
+			index:      currIndex,
+			fieldType:  f.Type,
+			tag:        tag,
+			ptrOffsets: ptrOffsets,
 		})
 	}
 	return fields
+}
+
+func slicesClonePtrOffsets(s []ptrOffset) []ptrOffset {
+	if len(s) == 0 {
+		return nil
+	}
+	c := make([]ptrOffset, len(s))
+	copy(c, s)
+	return c
 }
 
 func slicesClone(s []int) []int {
@@ -115,7 +140,7 @@ func getTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 }
 
 func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
-	allFields := collectStructFields(t, 0, nil)
+	allFields := collectStructFields(t, 0, nil, nil)
 	if len(allFields) == 0 {
 		return &typePlan{targetType: t}, nil
 	}
@@ -169,6 +194,22 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 			setter, err := compileSetter(sf.fieldType, sf.offset, sf.tag)
 			if err != nil {
 				return nil, err
+			}
+			if len(sf.ptrOffsets) > 0 {
+				pos := sf.ptrOffsets
+				innerSetter := setter
+				setter = func(structPtr unsafe.Pointer, raw []byte) error {
+					curr := structPtr
+					for _, po := range pos {
+						ptrLoc := (*unsafe.Pointer)(unsafe.Add(curr, po.offset))
+						if *ptrLoc == nil {
+							newVal := reflect.New(po.typ)
+							*ptrLoc = newVal.UnsafePointer()
+						}
+						curr = *ptrLoc
+					}
+					return innerSetter(curr, raw)
+				}
 			}
 			plannedFields = append(plannedFields, fieldPlan{
 				fieldName: sf.name,

@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"sync"
 	"unsafe"
+
+	"golang.org/x/text/encoding"
 )
 
 // DefaultParallelWorkers is the default number of worker goroutines for parallel parsing.
@@ -18,6 +20,30 @@ type ParallelOptions struct {
 	Workers int      // Number of worker goroutines (defaults to 4)
 	Ordered bool     // If true (default), preserves original CSV row ordering
 	Options []Option // CSV Reader options (delimiter, quote, etc.)
+}
+
+type readerConfig struct {
+	quoteByte byte
+	encoding  encoding.Encoding
+}
+
+func parseReaderConfig(opts []Option) (readerConfig, error) {
+	r := &Reader{
+		Comma:     ',',
+		Delimiter: ",",
+		Quote:     '"',
+	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	if r.initErr != nil {
+		return readerConfig{}, r.initErr
+	}
+	r.initDelimAndQuote()
+	return readerConfig{
+		quoteByte: r.quoteByte,
+		encoding:  r.encoding,
+	}, nil
 }
 
 func parseParallelAndCsvOpts(opts []any) (ParallelOptions, []Option) {
@@ -73,12 +99,12 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 		numWorkers = parOpts.Workers
 	}
 
-	dummy := NewReader(nil, csvOpts...)
-	if dummy.initErr != nil {
-		return dummy.initErr
+	cfg, err := parseReaderConfig(csvOpts)
+	if err != nil {
+		return err
 	}
-	if dummy.encoding != nil {
-		utf8Data, err := dummy.encoding.NewDecoder().Bytes(data)
+	if cfg.encoding != nil {
+		utf8Data, err := cfg.encoding.NewDecoder().Bytes(data)
 		if err != nil {
 			return err
 		}
@@ -96,7 +122,7 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 		}
 		return ParallelUnmarshal(data, v, filteredOpts...)
 	}
-	quoteByte := dummy.quoteByte
+	quoteByte := cfg.quoteByte
 
 	chunks, err := splitChunks(data, numWorkers, quoteByte)
 	if err != nil {
