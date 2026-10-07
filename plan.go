@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"unsafe"
@@ -46,15 +47,28 @@ type structFieldInfo struct {
 	fieldType  reflect.Type
 	tag        csvTag
 	ptrOffsets []ptrOffset
+	depth      int
 }
 
 func collectStructFields(t reflect.Type, baseOffset uintptr, baseIndex []int, ptrOffsets []ptrOffset) []structFieldInfo {
+	return collectStructFieldsInternal(t, baseOffset, baseIndex, ptrOffsets, 0, make(map[reflect.Type]bool))
+}
+
+func collectStructFieldsInternal(t reflect.Type, baseOffset uintptr, baseIndex []int, ptrOffsets []ptrOffset, depth int, visited map[reflect.Type]bool) []structFieldInfo {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {
 		return nil
 	}
+	if visited[t] {
+		return nil
+	}
+	newVisited := make(map[reflect.Type]bool, len(visited)+1)
+	for k, v := range visited {
+		newVisited[k] = v
+	}
+	newVisited[t] = true
 
 	var fields []structFieldInfo
 	for i := 0; i < t.NumField(); i++ {
@@ -71,16 +85,17 @@ func collectStructFields(t reflect.Type, baseOffset uintptr, baseIndex []int, pt
 		currOffset := baseOffset + f.Offset
 		currIndex := append(slicesClone(baseIndex), f.Index...)
 
-		if f.Anonymous {
+		if f.Anonymous || tag.inline {
 			ft := f.Type
-			if ft.Kind() == reflect.Struct {
-				embedded := collectStructFields(ft, currOffset, currIndex, ptrOffsets)
+			isSpecial := ft == timeType || ft.Implements(textMarshalerType) || reflect.PointerTo(ft).Implements(textMarshalerType)
+			if !isSpecial && ft.Kind() == reflect.Struct {
+				embedded := collectStructFieldsInternal(ft, currOffset, currIndex, ptrOffsets, depth+1, newVisited)
 				fields = append(fields, embedded...)
 				continue
-			} else if ft.Kind() == reflect.Pointer && ft.Elem().Kind() == reflect.Struct {
+			} else if !isSpecial && ft.Kind() == reflect.Pointer && ft.Elem().Kind() == reflect.Struct {
 				subType := ft.Elem()
 				newPtrOffsets := append(slicesClonePtrOffsets(ptrOffsets), ptrOffset{offset: currOffset, typ: subType})
-				embedded := collectStructFields(subType, 0, currIndex, newPtrOffsets)
+				embedded := collectStructFieldsInternal(subType, 0, currIndex, newPtrOffsets, depth+1, newVisited)
 				fields = append(fields, embedded...)
 				continue
 			}
@@ -93,6 +108,7 @@ func collectStructFields(t reflect.Type, baseOffset uintptr, baseIndex []int, pt
 			fieldType:  f.Type,
 			tag:        tag,
 			ptrOffsets: ptrOffsets,
+			depth:      depth,
 		})
 	}
 	return fields
@@ -186,6 +202,10 @@ func compileZeroer(t reflect.Type, offset uintptr) func(structPtr unsafe.Pointer
 		return func(structPtr unsafe.Pointer) {
 			*(*uint8)(unsafe.Add(structPtr, offset)) = 0
 		}
+	case reflect.Uintptr:
+		return func(structPtr unsafe.Pointer) {
+			*(*uintptr)(unsafe.Add(structPtr, offset)) = 0
+		}
 	case reflect.Float64:
 		return func(structPtr unsafe.Pointer) {
 			*(*float64)(unsafe.Add(structPtr, offset)) = 0
@@ -220,96 +240,100 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 		return &typePlan{targetType: t}, nil
 	}
 
+	sort.SliceStable(allFields, func(i, j int) bool {
+		return allFields[i].depth < allFields[j].depth
+	})
+
 	var plannedFields []fieldPlan
 	usedCols := make(map[int]bool)
+	usedFields := make(map[int]bool)
 
-	// For each struct field, find best matching column in headers
-	for _, sf := range allFields {
-		colIdx := -1
+	matchPass := func(matcher func(sf structFieldInfo, h string) bool) error {
+		for fIdx, sf := range allFields {
+			if usedFields[fIdx] {
+				continue
+			}
+			for colIdx, h := range headers {
+				if !usedCols[colIdx] && matcher(sf, h) {
+					usedCols[colIdx] = true
+					usedFields[fIdx] = true
 
-		targetName := sf.tag.name
-		if targetName != "" {
-			// 1. Exact match with tag name
-			for i, h := range headers {
-				if !usedCols[i] && h == targetName {
-					colIdx = i
+					setter, err := compileSetter(sf.fieldType, sf.offset, sf.tag)
+					if err != nil {
+						return err
+					}
+					zeroer := compileZeroer(sf.fieldType, sf.offset)
+					if len(sf.ptrOffsets) > 0 {
+						pos := sf.ptrOffsets
+						innerSetter := setter
+						innerZeroer := zeroer
+						setter = func(structPtr unsafe.Pointer, raw []byte) error {
+							curr := structPtr
+							for _, po := range pos {
+								ptrLoc := (*unsafe.Pointer)(unsafe.Add(curr, po.offset))
+								if *ptrLoc == nil {
+									newVal := reflect.New(po.typ)
+									*ptrLoc = newVal.UnsafePointer()
+								}
+								curr = *ptrLoc
+							}
+							return innerSetter(curr, raw)
+						}
+						zeroer = func(structPtr unsafe.Pointer) {
+							curr := structPtr
+							for _, po := range pos {
+								ptrLoc := (*unsafe.Pointer)(unsafe.Add(curr, po.offset))
+								if *ptrLoc == nil {
+									return
+								}
+								curr = *ptrLoc
+							}
+							innerZeroer(curr)
+						}
+					}
+					plannedFields = append(plannedFields, fieldPlan{
+						fieldName: sf.name,
+						colIndex:  colIdx,
+						offset:    sf.offset,
+						index:     sf.index,
+						fieldType: sf.fieldType,
+						tag:       sf.tag,
+						setter:    setter,
+						zeroer:    zeroer,
+					})
 					break
 				}
 			}
-			// 2. Case-insensitive match with tag name
-			if colIdx == -1 {
-				for i, h := range headers {
-					if !usedCols[i] && strings.EqualFold(h, targetName) {
-						colIdx = i
-						break
-					}
-				}
-			}
-		} else {
-			// 3. Exact match with field name
-			for i, h := range headers {
-				if !usedCols[i] && h == sf.name {
-					colIdx = i
-					break
-				}
-			}
-			// 4. Case-insensitive match with field name
-			if colIdx == -1 {
-				for i, h := range headers {
-					if !usedCols[i] && strings.EqualFold(h, sf.name) {
-						colIdx = i
-						break
-					}
-				}
-			}
 		}
+		return nil
+	}
 
-		if colIdx >= 0 {
-			usedCols[colIdx] = true
-			setter, err := compileSetter(sf.fieldType, sf.offset, sf.tag)
-			if err != nil {
-				return nil, err
-			}
-			zeroer := compileZeroer(sf.fieldType, sf.offset)
-			if len(sf.ptrOffsets) > 0 {
-				pos := sf.ptrOffsets
-				innerSetter := setter
-				innerZeroer := zeroer
-				setter = func(structPtr unsafe.Pointer, raw []byte) error {
-					curr := structPtr
-					for _, po := range pos {
-						ptrLoc := (*unsafe.Pointer)(unsafe.Add(curr, po.offset))
-						if *ptrLoc == nil {
-							newVal := reflect.New(po.typ)
-							*ptrLoc = newVal.UnsafePointer()
-						}
-						curr = *ptrLoc
-					}
-					return innerSetter(curr, raw)
-				}
-				zeroer = func(structPtr unsafe.Pointer) {
-					curr := structPtr
-					for _, po := range pos {
-						ptrLoc := (*unsafe.Pointer)(unsafe.Add(curr, po.offset))
-						if *ptrLoc == nil {
-							return
-						}
-						curr = *ptrLoc
-					}
-					innerZeroer(curr)
-				}
-			}
-			plannedFields = append(plannedFields, fieldPlan{
-				fieldName: sf.name,
-				colIndex:  colIdx,
-				offset:    sf.offset,
-				index:     sf.index,
-				fieldType: sf.fieldType,
-				tag:       sf.tag,
-				setter:    setter,
-				zeroer:    zeroer,
-			})
-		}
+	// Pass 1: Exact match with tag name
+	if err := matchPass(func(sf structFieldInfo, h string) bool {
+		return sf.tag.name != "" && h == sf.tag.name
+	}); err != nil {
+		return nil, err
+	}
+
+	// Pass 2: Exact match with field name
+	if err := matchPass(func(sf structFieldInfo, h string) bool {
+		return sf.tag.name == "" && h == sf.name
+	}); err != nil {
+		return nil, err
+	}
+
+	// Pass 3: Case-insensitive match with tag name
+	if err := matchPass(func(sf structFieldInfo, h string) bool {
+		return sf.tag.name != "" && strings.EqualFold(h, sf.tag.name)
+	}); err != nil {
+		return nil, err
+	}
+
+	// Pass 4: Case-insensitive match with field name
+	if err := matchPass(func(sf structFieldInfo, h string) bool {
+		return sf.tag.name == "" && strings.EqualFold(h, sf.name)
+	}); err != nil {
+		return nil, err
 	}
 
 	if len(plannedFields) == 0 && len(headers) > 0 {

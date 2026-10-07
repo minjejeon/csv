@@ -65,6 +65,19 @@ func (s *blockScanner) scanSpecial(data []byte) int {
 }
 
 func (s *blockScanner) scanBlock32(chunk []byte) (maskDelim, maskQuote, maskEOL uint32) {
+	if len(chunk) < 32 {
+		for i, b := range chunk {
+			bit := uint32(1) << i
+			if b == s.delim {
+				maskDelim |= bit
+			} else if b == s.quote {
+				maskQuote |= bit
+			} else if b == '\r' || b == '\n' {
+				maskEOL |= bit
+			}
+		}
+		return maskDelim, maskQuote, maskEOL
+	}
 	v := archsimd.LoadUint8x32(chunk[:32])
 	mD := v.Equal(s.vDelim)
 	mQ := v.Equal(s.vQuote)

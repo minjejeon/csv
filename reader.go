@@ -393,6 +393,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 				idx := bytes.IndexByte(r.buf[r.pos:r.end], r.quoteByte)
 				if idx >= 0 {
 					quotePos := r.pos + idx
+					r.line += bytes.Count(r.buf[r.pos:quotePos], []byte{'\n'})
 					for quotePos+1 >= r.end && !r.eof {
 						shift, err := r.ensureMore()
 						if err != nil {
@@ -481,6 +482,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 				}
 
 				// Quote not in current buffer
+				r.line += bytes.Count(r.buf[r.pos:r.end], []byte{'\n'})
 				if r.eof {
 					if !r.LazyQuotes {
 						return nil, &ParseError{Line: recordLine, Err: ErrQuote}

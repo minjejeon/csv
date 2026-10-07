@@ -21,6 +21,7 @@ type ParallelReader struct {
 	outCh      chan BatchRecord
 	closeOnce  sync.Once
 	doneCh     chan struct{}
+	mu         sync.Mutex
 	nextIndex  int
 	pending    map[int][][]string
 	err        error
@@ -102,6 +103,9 @@ func (pr *ParallelReader) producerLoop() {
 
 // ReadBatch reads and returns the next batch of CSV rows in order.
 func (pr *ParallelReader) ReadBatch() ([][]string, error) {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
 	if pr.eofReached {
 		return nil, io.EOF
 	}

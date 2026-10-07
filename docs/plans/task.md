@@ -60,4 +60,8 @@
 | Post-Audit Task 3: Struct Field []byte Support in Setter, Getter & Plan | Completed | setter.go, getter.go, plan.go, marshal_test.go |
 | Post-Audit Task 4: Fallback scanBlock32 Optimization | Completed | scan_fallback.go, scan_simd_other.go, scan_test.go |
 | Post-Audit Task 5: Full Verification, Race Detector & Commit | Completed | Test suites, benchmarks, git |
+| Source Audit Task 1: Dispatch 4 Subagents for Comprehensive Codebase Audit | Completed | Reader/Scanner, Decoder/Plan, Writer/Encoder, Concurrency/Generics |
+| Source Audit Task 2: Synthesize Findings, Categorize Severity & Triage Fixes | Completed | 13 issues empirically reproduced & verified in audit_repro_test.go |
+| Source Audit Task 3: Implement Fixes & Hardening for Identified Issues | Completed | Systematic patches across getter, setter, plan, tag, reader, parallel |
+| Source Audit Task 4: Verification, Race Detector, Regression Tests & Report | Completed | Standard, SIMD, Race, Benchmarks (All 13 repro tests & full suite pass) |
 

@@ -29,7 +29,7 @@ func fastParseSmallUint(b []byte) (uint64, bool) {
 	case 2:
 		d0 := b[0] - '0'
 		d1 := b[1] - '0'
-		if (d0 | d1) > 9 {
+		if d0 > 9 || d1 > 9 {
 			return 0, false
 		}
 		return uint64(d0)*10 + uint64(d1), true
@@ -37,7 +37,7 @@ func fastParseSmallUint(b []byte) (uint64, bool) {
 		d0 := b[0] - '0'
 		d1 := b[1] - '0'
 		d2 := b[2] - '0'
-		if (d0 | d1 | d2) > 9 {
+		if d0 > 9 || d1 > 9 || d2 > 9 {
 			return 0, false
 		}
 		return uint64(d0)*100 + uint64(d1)*10 + uint64(d2), true
@@ -46,7 +46,7 @@ func fastParseSmallUint(b []byte) (uint64, bool) {
 		d1 := b[1] - '0'
 		d2 := b[2] - '0'
 		d3 := b[3] - '0'
-		if (d0 | d1 | d2 | d3) > 9 {
+		if d0 > 9 || d1 > 9 || d2 > 9 || d3 > 9 {
 			return 0, false
 		}
 		return uint64(d0)*1000 + uint64(d1)*100 + uint64(d2)*10 + uint64(d3), true
@@ -66,9 +66,12 @@ func fastParseSmallUint(b []byte) (uint64, bool) {
 }
 
 func parseSignedInt(b []byte, bitSize int) (int64, error) {
+	if bitSize == 0 {
+		bitSize = strconv.IntSize
+	}
 	if len(b) > 0 {
 		switch bitSize {
-		case 64, 0:
+		case 64:
 			if len(b) <= 8 {
 				if v, ok := fastParseSmallUint(b); ok {
 					return int64(v), nil
@@ -140,9 +143,12 @@ func parseSignedInt(b []byte, bitSize int) (int64, error) {
 }
 
 func parseUnsignedInt(b []byte, bitSize int) (uint64, error) {
+	if bitSize == 0 {
+		bitSize = strconv.IntSize
+	}
 	if len(b) > 0 {
 		switch bitSize {
-		case 64, 0:
+		case 64:
 			if len(b) <= 8 {
 				if v, ok := fastParseSmallUint(b); ok {
 					return v, nil
@@ -728,6 +734,23 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 				return err
 			}
 			*(*uint64)(unsafe.Add(structPtr, offset)) = v
+			return nil
+		}, nil
+
+	case reflect.Uintptr:
+		return func(structPtr unsafe.Pointer, raw []byte) error {
+			if len(raw) == 0 {
+				if tag.omitEmpty {
+					*(*uintptr)(unsafe.Add(structPtr, offset)) = 0
+					return nil
+				}
+				return strconv.ErrSyntax
+			}
+			v, err := parseUnsignedInt(raw, strconv.IntSize)
+			if err != nil {
+				return err
+			}
+			*(*uintptr)(unsafe.Add(structPtr, offset)) = uintptr(v)
 			return nil
 		}, nil
 

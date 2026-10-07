@@ -350,7 +350,7 @@ func ParallelMarshal(v any, opts ...any) ([]byte, error) {
 
 	n := val.Len()
 	if n == 0 {
-		return nil, nil
+		return Marshal(v, opts...)
 	}
 
 	parOpts, otherOpts := parseParallelAndWriterOpts(opts)
@@ -409,11 +409,11 @@ func ParallelMarshal(v any, opts ...any) ([]byte, error) {
 			buf.Grow((endIdx - startIdx) * 64)
 
 			w := NewWriter(&buf, otherOpts...)
-			defer w.Close()
 
 			if chunkIdx == 0 {
 				if err := w.Write(plan.headerRow); err != nil {
 					outputs[chunkIdx].err = err
+					_ = w.Close()
 					return
 				}
 			}
@@ -430,6 +430,7 @@ func ParallelMarshal(v any, opts ...any) ([]byte, error) {
 						}
 						if err := w.WriteNewline(); err != nil {
 							outputs[chunkIdx].err = err
+							_ = w.Close()
 							return
 						}
 						continue
@@ -444,16 +445,23 @@ func ParallelMarshal(v any, opts ...any) ([]byte, error) {
 					}
 					if err := f.getter(structPtr, w); err != nil {
 						outputs[chunkIdx].err = fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
+						_ = w.Close()
 						return
 					}
 				}
 				if err := w.WriteNewline(); err != nil {
 					outputs[chunkIdx].err = err
+					_ = w.Close()
 					return
 				}
 			}
 
 			if err := w.Flush(); err != nil {
+				outputs[chunkIdx].err = err
+				_ = w.Close()
+				return
+			}
+			if err := w.Close(); err != nil {
 				outputs[chunkIdx].err = err
 				return
 			}

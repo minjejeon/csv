@@ -311,6 +311,10 @@ func MarshalSlice[T any, PT interface {
 	}
 
 	if err := w.Flush(); err != nil {
+		_ = w.Close()
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -366,11 +370,11 @@ func ParallelMarshalSlice[T any, PT interface {
 			buf.Grow((endIdx - startIdx) * 64)
 
 			w := NewWriter(&buf, otherOpts...)
-			defer w.Close()
 
 			if chunkIdx == 0 && len(header) > 0 {
 				if err := w.Write(header); err != nil {
 					outputs[chunkIdx].err = err
+					_ = w.Close()
 					return
 				}
 			}
@@ -379,15 +383,22 @@ func ParallelMarshalSlice[T any, PT interface {
 				ptr := PT(&slice[i])
 				if err := ptr.MarshalCSVRecord(w); err != nil {
 					outputs[chunkIdx].err = err
+					_ = w.Close()
 					return
 				}
 				if err := w.WriteNewline(); err != nil {
 					outputs[chunkIdx].err = err
+					_ = w.Close()
 					return
 				}
 			}
 
 			if err := w.Flush(); err != nil {
+				outputs[chunkIdx].err = err
+				_ = w.Close()
+				return
+			}
+			if err := w.Close(); err != nil {
 				outputs[chunkIdx].err = err
 				return
 			}

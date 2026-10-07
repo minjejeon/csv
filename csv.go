@@ -235,9 +235,12 @@ func Marshal(v any, opts ...any) ([]byte, error) {
 	}
 
 	if err := w.Flush(); err != nil {
+		_ = w.Close()
 		return nil, err
 	}
-	w.Close()
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
 	return buf.Bytes(), nil
 }
 

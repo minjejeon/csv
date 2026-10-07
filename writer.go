@@ -83,6 +83,9 @@ func NewWriter(w io.Writer, opts ...any) *Writer {
 		case Option:
 			var r Reader
 			fn(&r)
+			if r.initErr != nil {
+				writer.err = r.initErr
+			}
 			if r.Delimiter != "" {
 				writer.Delimiter = r.Delimiter
 			}
@@ -184,6 +187,9 @@ func (w *Writer) writeFieldBytes(field []byte) {
 
 // Write writes a single CSV record to w.
 func (w *Writer) Write(record []string) error {
+	if w.err != nil {
+		return w.err
+	}
 	w.checkDelimAndQuote()
 
 	for i, field := range record {
@@ -207,6 +213,9 @@ func (w *Writer) Write(record []string) error {
 
 // WriteAll writes multiple CSV records to w and flushes.
 func (w *Writer) WriteAll(records [][]string) error {
+	if w.err != nil {
+		return w.err
+	}
 	for _, record := range records {
 		if err := w.Write(record); err != nil {
 			return err
@@ -229,6 +238,9 @@ func (w *Writer) WriteDelimiter() {
 
 // WriteNewline writes the line terminator and auto-flushes if needed.
 func (w *Writer) WriteNewline() error {
+	if w.err != nil {
+		return w.err
+	}
 	if w.UseCRLF {
 		w.buf = append(w.buf, '\r', '\n')
 	} else {

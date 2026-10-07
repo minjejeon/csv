@@ -37,10 +37,35 @@ type csvTag struct {
 }
 
 func parseTag(tagStr string) csvTag {
+	tagStr = strings.TrimSpace(tagStr)
+	if tagStr == "" {
+		return csvTag{}
+	}
 	if tagStr == "-" {
 		return csvTag{ignore: true}
 	}
-	parts := strings.Split(tagStr, ",")
+
+	var parts []string
+	var current strings.Builder
+	inFormat := false
+	for i := 0; i < len(tagStr); i++ {
+		c := tagStr[i]
+		if c == ',' && !inFormat {
+			parts = append(parts, current.String())
+			current.Reset()
+			continue
+		}
+		current.WriteByte(c)
+		s := current.String()
+		trimmed := strings.TrimSpace(s)
+		if !inFormat && (strings.HasPrefix(trimmed, "format:") || strings.HasPrefix(trimmed, "format=")) {
+			inFormat = true
+		}
+	}
+	if current.Len() > 0 || len(parts) > 0 {
+		parts = append(parts, current.String())
+	}
+
 	tag := csvTag{
 		name: strings.TrimSpace(parts[0]),
 	}
@@ -55,6 +80,8 @@ func parseTag(tagStr string) csvTag {
 			tag.unique = true
 		case strings.HasPrefix(opt, "format="):
 			tag.format = strings.TrimPrefix(opt, "format=")
+		case strings.HasPrefix(opt, "format:"):
+			tag.format = strings.TrimPrefix(opt, "format:")
 		}
 	}
 	return tag
