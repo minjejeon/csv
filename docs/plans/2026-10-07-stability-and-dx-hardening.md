@@ -15,35 +15,36 @@
 **Files:**
 - Modify: `parallel.go:70-115, 305-320`
 - Modify: `generic.go:105-140`
-- Modify: `pool.go:100-120`
 - Modify: `record.go:1-50`
 - Modify: `plan.go:40-80`
-- Test: `pool_test.go`
+- Modify: `setter.go:720-754`
+- Test: `record_test.go`
+- Test: `parallel_test.go`
 - Test: `audit_test.go`
 
 **Step 1: Write the failing tests**
-- In `pool_test.go`: test that `releaseWriteBuf` drops buffers with capacity > 2MB.
 - In `audit_test.go`: test `Record.Clone()` independence when reader advances.
-- In `parallel_test.go`: verify `ParallelUnmarshal` runs repeatedly without accumulating pooled memory allocations.
+- In `parallel_test.go`: verify `ParallelUnmarshal` and `ParallelUnmarshalTo` run repeatedly without accumulating leaked buffers from unclosed dummy readers.
+- In `plan_test.go`: test decoding into structs with embedded struct pointers (`type Wrapper struct { *Inner }`).
 
 **Step 2: Run tests to verify failures**
-Run: `go test -v -run "TestPoolCap|TestRecordClone" ./...`
+Run: `go test -v -run "TestRecordClone|TestEmbeddedPtr" ./...`
 Expected: FAIL (methods or behaviors not yet implemented)
 
 **Step 3: Write minimal implementation**
-1. In `pool.go`: define `const maxPoolBufferSize = 2 * 1024 * 1024`. In `releaseWriteBuf`, check `if cap(*b) > maxPoolBufferSize { return }`.
-2. In `parallel.go` & `generic.go`: replace `dummy := NewReader(nil, csvOpts...)` with lightweight option inspection helper or ensure `defer dummy.Close()`.
-3. In `record.go`: implement `func (rec *Record) Clone() *Record` that copies spans and raw bytes into a new standalone buffer.
-4. In `plan.go`: extend `collectStructFields` to handle `f.Type.Kind() == reflect.Pointer && f.Type.Elem().Kind() == reflect.Struct`.
+1. In `parallel.go` & `generic.go`: replace throwaway `dummy := NewReader(nil, csvOpts...)` with non-allocating option inspection helper `extractReaderConfig` (or ensure `defer dummy.Close()`).
+2. In `record.go`: implement `func (rec *Record) Clone() *Record` that copies spans and raw bytes into a new standalone buffer.
+3. In `plan.go`: extend `collectStructFields` to handle `f.Type.Kind() == reflect.Pointer && f.Type.Elem().Kind() == reflect.Struct`.
+4. In `setter.go`: ensure embedded struct pointers are automatically initialized if nil before setting fields.
 
 **Step 4: Run tests to verify they pass**
-Run: `go test -v -run "TestPoolCap|TestRecordClone|TestParallel" ./...`
+Run: `go test -v -run "TestRecordClone|TestParallel|TestEmbeddedPtr" ./...`
 Expected: PASS
 
 **Step 5: Commit**
 ```bash
-git add pool.go parallel.go generic.go record.go plan.go pool_test.go audit_test.go
-git commit -m "fix(safety): eliminate pool leaks, bound write pool buffer, and add Record.Clone"
+git add parallel.go generic.go record.go plan.go setter.go audit_test.go
+git commit -m "fix(safety): eliminate dummy reader leaks, add Record.Clone, and support embedded struct pointers"
 ```
 
 ---

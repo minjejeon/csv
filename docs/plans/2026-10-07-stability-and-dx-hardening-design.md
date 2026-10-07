@@ -15,11 +15,9 @@ The enhancements eliminate critical memory/pool leaks, prevent unbounded buffer 
   2. If a dummy reader is ever used, guarantee `defer dummy.Close()` is executed immediately.
   3. Ensure non-UTF8 encoding conversions do not trigger compounding buffer leaks on recursive calls.
 
-### 1.2 Bounded `sync.Pool` Memory Growth (`maxPoolBufferSize`)
-- **Root Cause**: In [`pool.go`](file:///home/minje/dev/csv/pool.go), `releaseWriteBuf(b *[]byte)` puts slices back into `writeBufPool` without checking an upper bound on capacity. Serializing large batches can result in multi-hundred-megabyte buffers being permanently hoarded in `sync.Pool`.
-- **Solution**:
-  - Define `const maxPoolBufferSize = 2 * 1024 * 1024` (2MB).
-  - In `releaseWriteBuf`, if `cap(*b) > maxPoolBufferSize`, discard the pointer and let the Go GC reclaim the memory.
+### 1.2 Bounded vs GC-Managed `sync.Pool` Lifecycle
+- **Decision**: Rather than imposing an arbitrary strict cap (e.g., 2MB) that could cause repeated reallocations when processing medium-to-large records (5MB~20MB), leave pool buffer reclamation to Go's runtime GC (`sync.Pool` victim cache).
+- `sync.Pool` entries are automatically reclaimed across GC cycles when idle, ensuring maximum throughput for large batch serializations without artificial overhead.
 
 ### 1.3 Zero-Copy Record Cloning (`Record.Clone()`)
 - **Root Cause**: `r.ReadRecord()` returns a pointer `&r.record` reusing internal sliding buffers. Storing records or passing them across goroutines leads to data corruption on subsequent read iterations.
