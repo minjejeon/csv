@@ -68,11 +68,6 @@ func Unmarshal(data []byte, v any, opts ...Option) error {
 	elemSize := structType.Size()
 	ptrSize := unsafe.Sizeof(uintptr(0))
 
-	var uniqueSeen map[int]map[string]struct{}
-	if plan.hasUnique {
-		uniqueSeen = make(map[int]map[string]struct{})
-	}
-
 	rowIdx := 0
 	for {
 		rec, err := dec.r.ReadRecord()
@@ -95,27 +90,6 @@ func Unmarshal(data []byte, v any, opts ...Option) error {
 		}
 
 		numFields := rec.NumFields()
-
-		if plan.hasUnique {
-			for _, f := range plan.fields {
-				if f.tag.unique {
-					var raw []byte
-					if f.colIndex < numFields {
-						raw = rec.Field(f.colIndex)
-					}
-					valStr := string(raw)
-					colSeen := uniqueSeen[f.colIndex]
-					if colSeen == nil {
-						colSeen = make(map[string]struct{})
-						uniqueSeen[f.colIndex] = colSeen
-					}
-					if _, exists := colSeen[valStr]; exists {
-						return &DuplicateFieldError{Field: f.fieldName, Value: valStr, Row: rowIdx + 1}
-					}
-					colSeen[valStr] = struct{}{}
-				}
-			}
-		}
 
 		if isPtrElem {
 			newElem := reflect.New(structType)
@@ -205,11 +179,6 @@ func Marshal(v any, opts ...any) ([]byte, error) {
 				sliceBasePtr = newVal.Addr().UnsafePointer()
 			}
 		}
-		var uniqueSeen map[int]map[string]struct{}
-		if plan.hasUnique {
-			uniqueSeen = make(map[int]map[string]struct{})
-		}
-
 		for i := 0; i < n; i++ {
 			var structPtr unsafe.Pointer
 			if isPtr {
@@ -229,40 +198,12 @@ func Marshal(v any, opts ...any) ([]byte, error) {
 				structPtr = unsafe.Add(sliceBasePtr, uintptr(i)*elemSize)
 			}
 
-			if plan.hasUnique {
-				for j, f := range plan.fields {
-					if j > 0 {
-						w.WriteDelimiter()
-					}
-					if f.tag.unique {
-						startLen := len(w.buf)
-						if err := f.getter(structPtr, w); err != nil {
-							return nil, fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
-						}
-						valStr := string(w.buf[startLen:])
-						colSeen := uniqueSeen[j]
-						if colSeen == nil {
-							colSeen = make(map[string]struct{})
-							uniqueSeen[j] = colSeen
-						}
-						if _, exists := colSeen[valStr]; exists {
-							return nil, &DuplicateFieldError{Field: f.colName, Value: valStr, Row: i + 1}
-						}
-						colSeen[valStr] = struct{}{}
-					} else {
-						if err := f.getter(structPtr, w); err != nil {
-							return nil, fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
-						}
-					}
+			for j, f := range plan.fields {
+				if j > 0 {
+					w.WriteDelimiter()
 				}
-			} else {
-				for j, f := range plan.fields {
-					if j > 0 {
-						w.WriteDelimiter()
-					}
-					if err := f.getter(structPtr, w); err != nil {
-						return nil, fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
-					}
+				if err := f.getter(structPtr, w); err != nil {
+					return nil, fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
 				}
 			}
 			if err := w.WriteNewline(); err != nil {

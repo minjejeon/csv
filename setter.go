@@ -6,7 +6,9 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
+	"unique"
 	"unsafe"
 )
 
@@ -266,8 +268,241 @@ func compileSetter(t reflect.Type, offset uintptr, tag csvTag) (fieldSetter, err
 		}, nil
 	}
 
+	if t.PkgPath() == "unique" && strings.HasPrefix(t.Name(), "Handle[") {
+		if valMethod, ok := t.MethodByName("Value"); ok {
+			elemType := valMethod.Type.Out(0)
+			switch elemType.Kind() {
+			case reflect.String:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					s := string(raw)
+					h := unique.Make(s)
+					*(*unique.Handle[string])(unsafe.Add(structPtr, offset)) = h
+					return nil
+				}, nil
+			case reflect.Int:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[int])(unsafe.Add(structPtr, offset)) = unique.Make(0)
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseSignedInt(raw, strconv.IntSize)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[int])(unsafe.Add(structPtr, offset)) = unique.Make(int(v))
+					return nil
+				}, nil
+			case reflect.Int64:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[int64])(unsafe.Add(structPtr, offset)) = unique.Make(int64(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseSignedInt(raw, 64)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[int64])(unsafe.Add(structPtr, offset)) = unique.Make(v)
+					return nil
+				}, nil
+			case reflect.Int32:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[int32])(unsafe.Add(structPtr, offset)) = unique.Make(int32(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseSignedInt(raw, 32)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[int32])(unsafe.Add(structPtr, offset)) = unique.Make(int32(v))
+					return nil
+				}, nil
+			case reflect.Int16:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[int16])(unsafe.Add(structPtr, offset)) = unique.Make(int16(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseSignedInt(raw, 16)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[int16])(unsafe.Add(structPtr, offset)) = unique.Make(int16(v))
+					return nil
+				}, nil
+			case reflect.Int8:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[int8])(unsafe.Add(structPtr, offset)) = unique.Make(int8(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseSignedInt(raw, 8)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[int8])(unsafe.Add(structPtr, offset)) = unique.Make(int8(v))
+					return nil
+				}, nil
+			case reflect.Uint:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[uint])(unsafe.Add(structPtr, offset)) = unique.Make(uint(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseUnsignedInt(raw, strconv.IntSize)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[uint])(unsafe.Add(structPtr, offset)) = unique.Make(uint(v))
+					return nil
+				}, nil
+			case reflect.Uint64:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[uint64])(unsafe.Add(structPtr, offset)) = unique.Make(uint64(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseUnsignedInt(raw, 64)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[uint64])(unsafe.Add(structPtr, offset)) = unique.Make(v)
+					return nil
+				}, nil
+			case reflect.Uint32:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[uint32])(unsafe.Add(structPtr, offset)) = unique.Make(uint32(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseUnsignedInt(raw, 32)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[uint32])(unsafe.Add(structPtr, offset)) = unique.Make(uint32(v))
+					return nil
+				}, nil
+			case reflect.Uint16:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[uint16])(unsafe.Add(structPtr, offset)) = unique.Make(uint16(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseUnsignedInt(raw, 16)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[uint16])(unsafe.Add(structPtr, offset)) = unique.Make(uint16(v))
+					return nil
+				}, nil
+			case reflect.Uint8:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[uint8])(unsafe.Add(structPtr, offset)) = unique.Make(uint8(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					v, err := parseUnsignedInt(raw, 8)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[uint8])(unsafe.Add(structPtr, offset)) = unique.Make(uint8(v))
+					return nil
+				}, nil
+			case reflect.Float64:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[float64])(unsafe.Add(structPtr, offset)) = unique.Make(0.0)
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					s := unsafe.String(unsafe.SliceData(raw), len(raw))
+					v, err := strconv.ParseFloat(s, 64)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[float64])(unsafe.Add(structPtr, offset)) = unique.Make(v)
+					return nil
+				}, nil
+			case reflect.Float32:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 {
+						if tag.omitEmpty {
+							*(*unique.Handle[float32])(unsafe.Add(structPtr, offset)) = unique.Make(float32(0))
+							return nil
+						}
+						return strconv.ErrSyntax
+					}
+					s := unsafe.String(unsafe.SliceData(raw), len(raw))
+					v, err := strconv.ParseFloat(s, 32)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[float32])(unsafe.Add(structPtr, offset)) = unique.Make(float32(v))
+					return nil
+				}, nil
+			case reflect.Bool:
+				return func(structPtr unsafe.Pointer, raw []byte) error {
+					if len(raw) == 0 && tag.omitEmpty {
+						*(*unique.Handle[bool])(unsafe.Add(structPtr, offset)) = unique.Make(false)
+						return nil
+					}
+					v, err := parseBoolFast(raw)
+					if err != nil {
+						return err
+					}
+					*(*unique.Handle[bool])(unsafe.Add(structPtr, offset)) = unique.Make(v)
+					return nil
+				}, nil
+			}
+		}
+	}
+
 	switch t.Kind() {
 	case reflect.String:
+		if tag.unique {
+			return func(structPtr unsafe.Pointer, raw []byte) error {
+				if len(raw) == 0 && tag.omitEmpty {
+					*(*string)(unsafe.Add(structPtr, offset)) = ""
+					return nil
+				}
+				s := string(raw)
+				*(*string)(unsafe.Add(structPtr, offset)) = unique.Make(s).Value()
+				return nil
+			}, nil
+		}
 		return func(structPtr unsafe.Pointer, raw []byte) error {
 			if len(raw) == 0 && tag.omitEmpty {
 				*(*string)(unsafe.Add(structPtr, offset)) = ""

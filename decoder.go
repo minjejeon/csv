@@ -16,8 +16,6 @@ type Decoder struct {
 	plan       *typePlan
 	targetType reflect.Type
 	hasMore    bool
-	uniqueSeen map[int]map[string]struct{}
-	rowCount   int
 }
 
 // NewDecoder creates a new streaming CSV decoder reading from r.
@@ -47,8 +45,6 @@ func (d *Decoder) Reset(r io.Reader) {
 	d.plan = nil
 	d.targetType = nil
 	d.hasMore = true
-	d.uniqueSeen = nil
-	d.rowCount = 0
 }
 
 // Close releases the Decoder's pooled buffers back to their respective pools.
@@ -124,33 +120,8 @@ func (d *Decoder) Decode(v any) error {
 		return err
 	}
 
-	d.rowCount++
 	structPtr := val.UnsafePointer()
 	numFields := rec.NumFields()
-
-	if d.plan.hasUnique {
-		if d.uniqueSeen == nil {
-			d.uniqueSeen = make(map[int]map[string]struct{})
-		}
-		for _, f := range d.plan.fields {
-			if f.tag.unique {
-				var raw []byte
-				if f.colIndex < numFields {
-					raw = rec.Field(f.colIndex)
-				}
-				valStr := string(raw)
-				colSeen := d.uniqueSeen[f.colIndex]
-				if colSeen == nil {
-					colSeen = make(map[string]struct{})
-					d.uniqueSeen[f.colIndex] = colSeen
-				}
-				if _, exists := colSeen[valStr]; exists {
-					return &DuplicateFieldError{Field: f.fieldName, Value: valStr, Row: d.rowCount}
-				}
-				colSeen[valStr] = struct{}{}
-			}
-		}
-	}
 
 	for _, f := range d.plan.fields {
 		if f.colIndex < numFields {

@@ -50,7 +50,7 @@ func parseTag(tagStr string) csvTag {
 			tag.omitEmpty = true
 		case "inline":
 			tag.inline = true
-		case "unique":
+		case "unique", "intern":
 			tag.unique = true
 		}
 	}

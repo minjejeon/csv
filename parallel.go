@@ -123,7 +123,6 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 
 	numChunks := len(chunks)
 	chunkResults := make([]reflect.Value, numChunks)
-	chunkUnique := make([]map[int]map[string]struct{}, numChunks)
 
 	var wg sync.WaitGroup
 	var once sync.Once
@@ -158,11 +157,6 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 			elemSize := structType.Size()
 			ptrSize := unsafe.Sizeof(uintptr(0))
 
-			var localUniqueSeen map[int]map[string]struct{}
-			if plan.hasUnique {
-				localUniqueSeen = make(map[int]map[string]struct{})
-			}
-
 			rowIdx := 0
 			for {
 				rec, err := r.ReadRecord()
@@ -188,30 +182,6 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 				}
 
 				numFields := rec.NumFields()
-
-				if plan.hasUnique {
-					for _, f := range plan.fields {
-						if f.tag.unique {
-							var raw []byte
-							if f.colIndex < numFields {
-								raw = rec.Field(f.colIndex)
-							}
-							valStr := string(raw)
-							colSeen := localUniqueSeen[f.colIndex]
-							if colSeen == nil {
-								colSeen = make(map[string]struct{})
-								localUniqueSeen[f.colIndex] = colSeen
-							}
-							if _, exists := colSeen[valStr]; exists {
-								once.Do(func() {
-									workerErr = &DuplicateFieldError{Field: f.fieldName, Value: valStr, Row: rowIdx + 1}
-								})
-								return
-							}
-							colSeen[valStr] = struct{}{}
-						}
-					}
-				}
 
 				if isPtrElem {
 					newElem := reflect.New(structType)
@@ -249,9 +219,6 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 			}
 
 			chunkResults[chunkIdx] = localSlice.Slice(0, rowIdx)
-			if plan.hasUnique {
-				chunkUnique[chunkIdx] = localUniqueSeen
-			}
 		}()
 	}
 
@@ -259,32 +226,6 @@ func ParallelUnmarshal(data []byte, v any, opts ...any) error {
 
 	if workerErr != nil {
 		return workerErr
-	}
-
-	if plan.hasUnique {
-		globalSeen := make(map[int]map[string]struct{})
-		for _, wMap := range chunkUnique {
-			for colIdx, set := range wMap {
-				gSet := globalSeen[colIdx]
-				if gSet == nil {
-					gSet = make(map[string]struct{})
-					globalSeen[colIdx] = gSet
-				}
-				for valStr := range set {
-					if _, exists := gSet[valStr]; exists {
-						var colName string
-						for _, f := range plan.fields {
-							if f.colIndex == colIdx {
-								colName = f.fieldName
-								break
-							}
-						}
-						return &DuplicateFieldError{Field: colName, Value: valStr}
-					}
-					gSet[valStr] = struct{}{}
-				}
-			}
-		}
 	}
 
 	// 2. Concatenate chunkResults in order
@@ -388,7 +329,6 @@ func ParallelMarshal(v any, opts ...any) ([]byte, error) {
 		err error
 	}
 	outputs := make([]chunkOutput, numChunks)
-	chunkUnique := make([]map[int]map[string]struct{}, numChunks)
 	var wg sync.WaitGroup
 	wg.Add(numChunks)
 
@@ -430,11 +370,6 @@ func ParallelMarshal(v any, opts ...any) ([]byte, error) {
 				}
 			}
 
-			var localUniqueSeen map[int]map[string]struct{}
-			if plan.hasUnique {
-				localUniqueSeen = make(map[int]map[string]struct{})
-			}
-
 			for i := startIdx; i < endIdx; i++ {
 				var structPtr unsafe.Pointer
 				if isPtr {
@@ -459,38 +394,15 @@ func ParallelMarshal(v any, opts ...any) ([]byte, error) {
 					if j > 0 {
 						w.WriteDelimiter()
 					}
-					if f.tag.unique {
-						startLen := len(w.buf)
-						if err := f.getter(structPtr, w); err != nil {
-							outputs[chunkIdx].err = fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
-							return
-						}
-						valStr := string(w.buf[startLen:])
-						colSeen := localUniqueSeen[j]
-						if colSeen == nil {
-							colSeen = make(map[string]struct{})
-							localUniqueSeen[j] = colSeen
-						}
-						if _, exists := colSeen[valStr]; exists {
-							outputs[chunkIdx].err = &DuplicateFieldError{Field: f.colName, Value: valStr, Row: i + 1}
-							return
-						}
-						colSeen[valStr] = struct{}{}
-					} else {
-						if err := f.getter(structPtr, w); err != nil {
-							outputs[chunkIdx].err = fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
-							return
-						}
+					if err := f.getter(structPtr, w); err != nil {
+						outputs[chunkIdx].err = fmt.Errorf("csv: error encoding field %s: %w", f.colName, err)
+						return
 					}
 				}
 				if err := w.WriteNewline(); err != nil {
 					outputs[chunkIdx].err = err
 					return
 				}
-			}
-
-			if plan.hasUnique {
-				chunkUnique[chunkIdx] = localUniqueSeen
 			}
 
 			if err := w.Flush(); err != nil {
@@ -506,25 +418,6 @@ func ParallelMarshal(v any, opts ...any) ([]byte, error) {
 	for _, out := range outputs {
 		if out.err != nil {
 			return nil, out.err
-		}
-	}
-
-	if plan.hasUnique {
-		globalSeen := make(map[int]map[string]struct{})
-		for _, wMap := range chunkUnique {
-			for j, set := range wMap {
-				gSet := globalSeen[j]
-				if gSet == nil {
-					gSet = make(map[string]struct{})
-					globalSeen[j] = gSet
-				}
-				for valStr := range set {
-					if _, exists := gSet[valStr]; exists {
-						return nil, &DuplicateFieldError{Field: plan.fields[j].colName, Value: valStr}
-					}
-					gSet[valStr] = struct{}{}
-				}
-			}
 		}
 	}
 
