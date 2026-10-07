@@ -39,3 +39,8 @@
 | Serialization Task 2: Struct Encoder & Marshal with Direct Unsafe Getters | Completed | getter.go, encoder.go, csv.go, marshal_test.go |
 | Serialization Task 3: Multithreaded ParallelMarshal & Generic RecordMarshaler API | Completed | parallel.go, generic.go, parallel_marshal_test.go, generic_marshal_test.go |
 | Serialization Task 4: Round-Trip, Regression & Benchmark Verification | Completed | marshal_bench_test.go: 919 MB/s ParallelMarshal (6.35x vs csvutil), 16 allocs/op, 0 races |
+| Stability & DX: Context Exploration & Codebase Audit | Completed | Comprehensive audit across Reader, Decoder, Writer, Encoder, Pools, and Generics |
+| Stability & DX: Clarifying Questions & User Alignment | In Progress | Align on prioritization of stability fixes and DX enhancements |
+| Stability & DX: 2-3 Architectural Approaches Proposal | Pending | Structured approaches balancing zero-alloc vs safety |
+| Stability & DX: Present Design Sections & Approval | Pending | Section-by-section review |
+| Stability & DX: Write Design Doc & Git Commit | Pending | Save to docs/plans/ |
