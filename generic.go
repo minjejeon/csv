@@ -32,6 +32,9 @@ func UnmarshalTo[T any, PT interface {
 	*T
 	RecordUnmarshaler
 }](data []byte, out *[]T, opts ...Option) error {
+	if out == nil {
+		return errors.New("csv: out pointer must not be nil")
+	}
 	r := NewReader(bytes.NewReader(data), opts...)
 	defer r.Close()
 
@@ -103,6 +106,9 @@ func ParallelUnmarshalTo[T any, PT interface {
 	*T
 	RecordUnmarshaler
 }](data []byte, out *[]T, opts ...any) error {
+	if out == nil {
+		return errors.New("csv: out pointer must not be nil")
+	}
 	parOpts, csvOpts := parseParallelAndCsvOpts(opts)
 	numWorkers := DefaultParallelWorkers
 	if parOpts.Workers > 0 {

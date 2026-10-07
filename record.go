@@ -15,18 +15,24 @@ type Record struct {
 
 // Line returns the line number (1-based) where the record starts in the CSV input.
 func (rec *Record) Line() int {
+	if rec == nil {
+		return 0
+	}
 	return rec.line
 }
 
 // NumFields returns the number of fields in the record.
 func (rec *Record) NumFields() int {
+	if rec == nil {
+		return 0
+	}
 	return len(rec.spans)
 }
 
 // RawField returns the raw byte slice of field i as it appears in the read buffer.
 // Note: If the field was quoted and had escaped quotes (""), RawField will include the escapes.
 func (rec *Record) RawField(i int) []byte {
-	if i < 0 || i >= len(rec.spans) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
 		return nil
 	}
 	s := rec.spans[i]
@@ -37,7 +43,7 @@ func (rec *Record) RawField(i int) []byte {
 // If the field has no escaped quotes, this is zero-copy directly from the read buffer.
 // If the field has escaped quotes, it returns unescaped bytes using the Reader's scratch buffer.
 func (rec *Record) Field(i int) []byte {
-	if i < 0 || i >= len(rec.spans) {
+	if rec == nil || i < 0 || i >= len(rec.spans) {
 		return nil
 	}
 	s := &rec.spans[i]
@@ -135,7 +141,11 @@ func (rec *Record) FieldUint64(i int) (uint64, error) {
 
 // FieldBool parses field i as a boolean.
 func (rec *Record) FieldBool(i int) (bool, error) {
-	return parseBoolFast(rec.Field(i))
+	b := rec.Field(i)
+	if len(b) == 0 {
+		return false, nil
+	}
+	return parseBoolFast(b)
 }
 
 // FieldFloat64 parses field i as a float64.

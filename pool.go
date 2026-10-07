@@ -89,8 +89,11 @@ func acquireFieldBufHolder() *byteBufHolder {
 	return h
 }
 
+// maxPoolBufferSize is the maximum buffer capacity (1MB) retained in memory pools.
+const maxPoolBufferSize = 1024 * 1024
+
 func releaseFieldBufHolder(h *byteBufHolder) {
-	if h == nil {
+	if h == nil || cap(h.buf) > maxPoolBufferSize {
 		return
 	}
 	h.buf = h.buf[:0]
@@ -111,7 +114,7 @@ func acquireWriteBuf() *[]byte {
 }
 
 func releaseWriteBuf(b *[]byte) {
-	if b == nil || cap(*b) < defaultBufferSize {
+	if b == nil || cap(*b) < defaultBufferSize || cap(*b) > maxPoolBufferSize {
 		return
 	}
 	*b = (*b)[:0]

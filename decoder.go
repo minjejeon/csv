@@ -163,8 +163,8 @@ func (d *Decoder) Decode(v any) error {
 					Err:    err,
 				}
 			}
-		} else {
-			_ = f.setter(structPtr, nil)
+		} else if f.zeroer != nil {
+			f.zeroer(structPtr)
 		}
 	}
 

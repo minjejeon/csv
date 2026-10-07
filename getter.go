@@ -322,6 +322,9 @@ func compileGetter(f structFieldInfo) (fieldGetterFunc, error) {
 			case reflect.Bool:
 				return func(structPtr unsafe.Pointer, w *Writer) error {
 					h := *(*unique.Handle[bool])(unsafe.Add(structPtr, offset))
+					if !h.Value() && omitEmpty {
+						return nil
+					}
 					if h.Value() {
 						w.WriteFieldBytes([]byte("true"))
 					} else {

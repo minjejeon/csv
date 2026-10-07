@@ -249,5 +249,84 @@ func TestReaderNoQuoteFastPath(t *testing.T) {
 	}
 }
 
+func TestCountRecordsQuotedEOF(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		quote byte
+		want  int
+	}{
+		{
+			name:  "single quoted field no newline",
+			input: "\"a\"",
+			quote: '"',
+			want:  1,
+		},
+		{
+			name:  "single quoted field with newline",
+			input: "\"a\"\n",
+			quote: '"',
+			want:  1,
+		},
+		{
+			name:  "two rows ending with quoted field without newline",
+			input: "id,name\n1,\"Alice\"",
+			quote: '"',
+			want:  2,
+		},
+		{
+			name:  "multiline quoted field without newline",
+			input: "id,comment\n1,\"multi\nline\ntext\"",
+			quote: '"',
+			want:  2,
+		},
+		{
+			name:  "empty input",
+			input: "",
+			quote: '"',
+			want:  0,
+		},
+		{
+			name:  "single newline only",
+			input: "\n",
+			quote: '"',
+			want:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := countRecords([]byte(tt.input), tt.quote)
+			if got != tt.want {
+				t.Fatalf("countRecords(%q) = %d, want %d", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReaderFastPathQuoteAfterEOL(t *testing.T) {
+	// First row is unquoted: "a,b,c\n"
+	// Second row begins with quote: "\"quoted\",val\n"
+	// Both rows easily fit within 32 bytes
+	data := "a,b,c\n\"quoted\",val\n"
+	r := NewReader(strings.NewReader(data))
+	rec1, err := r.Read()
+	if err != nil {
+		t.Fatalf("row 1 read failed: %v", err)
+	}
+	if len(rec1) != 3 || rec1[0] != "a" || rec1[1] != "b" || rec1[2] != "c" {
+		t.Fatalf("row 1 mismatch: %v", rec1)
+	}
+	rec2, err := r.Read()
+	if err != nil {
+		t.Fatalf("row 2 read failed: %v", err)
+	}
+	if len(rec2) != 2 || rec2[0] != "quoted" || rec2[1] != "val" {
+		t.Fatalf("row 2 mismatch: %v", rec2)
+	}
+}
+
+
+
 
 

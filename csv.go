@@ -242,6 +242,10 @@ func Marshal(v any, opts ...any) ([]byte, error) {
 }
 
 func countRecords(s []byte, quote ...byte) int {
+	if len(s) == 0 {
+		return 0
+	}
+
 	q := byte('"')
 	if len(quote) > 0 && quote[0] != 0 {
 		q = quote[0]
@@ -249,9 +253,6 @@ func countRecords(s []byte, quote ...byte) int {
 
 	// Fast path: if there are no quotes in the data, count newlines directly
 	if bytes.IndexByte(s, q) == -1 {
-		if len(s) == 0 {
-			return 0
-		}
 		n := bytes.Count(s, []byte{'\n'})
 		if s[len(s)-1] != '\n' {
 			n++
@@ -260,16 +261,14 @@ func countRecords(s []byte, quote ...byte) int {
 	}
 
 	cutset := string([]byte{'\n', q})
+	hasTrailingRecord := s[len(s)-1] != '\n'
 
 	var n int
 	inQuote := false
 	for len(s) > 0 {
 		i := bytes.IndexAny(s, cutset)
 		if i == -1 {
-			if len(s) > 0 {
-				n++
-			}
-			return n
+			break
 		}
 
 		c := s[i]
@@ -292,6 +291,9 @@ func countRecords(s []byte, quote ...byte) int {
 				s = s[i+1:]
 			}
 		}
+	}
+	if hasTrailingRecord {
+		n++
 	}
 	return n
 }

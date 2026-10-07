@@ -753,14 +753,13 @@ func (r *Reader) readRecordFastNoQuote(recordLine int) (*Record, bool, error) {
 		}
 
 		mDelim, mQuote, mEOL := r.scanner.scanBlock32(r.buf[r.pos : r.pos+32])
-		if mQuote != 0 {
-			r.pos = startPos
-			r.record.spans = r.record.spans[:0]
-			return nil, false, nil
-		}
-
 		if mEOL != 0 {
 			eolOffset := bits.TrailingZeros32(mEOL)
+			if mQuote&((uint32(1)<<eolOffset)-1) != 0 {
+				r.pos = startPos
+				r.record.spans = r.record.spans[:0]
+				return nil, false, nil
+			}
 			b := r.buf[r.pos+eolOffset]
 			var nextRecordPos int
 			if b == '\n' {
@@ -824,6 +823,12 @@ func (r *Reader) readRecordFastNoQuote(recordLine int) (*Record, bool, error) {
 			r.record.raw = r.buf
 			r.record.line = recordLine
 			return &r.record, true, nil
+		}
+
+		if mQuote != 0 {
+			r.pos = startPos
+			r.record.spans = r.record.spans[:0]
+			return nil, false, nil
 		}
 
 		for mDelim != 0 {

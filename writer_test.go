@@ -2,6 +2,7 @@ package csv
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -96,3 +97,71 @@ func TestWriterAutoFlush(t *testing.T) {
 		t.Fatalf("expected 2000 lines, got %d", len(lines))
 	}
 }
+
+func TestWriterCommaMutation(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	w.Comma = ';'
+	if err := w.Write([]string{"a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	expected := "a;b\n"
+	if buf.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, buf.String())
+	}
+}
+
+func TestWriterQuoteMutation(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	w.Quote = '\''
+	if err := w.Write([]string{"has,comma", "plain"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	expected := "'has,comma',plain\n"
+	if buf.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, buf.String())
+	}
+}
+
+func TestWriterMultiCharDelimQuotingPrecision(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf, WithDelimiter("||"))
+	// Single pipe should not trigger quotes when delimiter is "||"
+	if err := w.Write([]string{"single|pipe", "has||delim"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	expected := "single|pipe||\"has||delim\"\n"
+	if buf.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, buf.String())
+	}
+}
+
+type errWriter struct{}
+
+func (ew *errWriter) Write(p []byte) (n int, err error) {
+	return 0, errors.New("write disk failure")
+}
+
+func TestWriterErrorMethod(t *testing.T) {
+	ew := &errWriter{}
+	w := NewWriter(ew)
+	_ = w.Write([]string{"foo", "bar"})
+	err := w.Flush()
+	if err == nil {
+		t.Fatal("expected flush error")
+	}
+	if w.Error() == nil || w.Error().Error() != "write disk failure" {
+		t.Fatalf("w.Error() expected 'write disk failure', got %v", w.Error())
+	}
+}
+

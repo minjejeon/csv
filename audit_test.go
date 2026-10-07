@@ -385,3 +385,57 @@ func TestUTF8BOMStripping(t *testing.T) {
 		t.Errorf("header 0 = %q, want '\xef\xbb\xbfid'", recNoTrim[0])
 	}
 }
+
+func TestRecordNilSafety(t *testing.T) {
+	var rec *Record
+	if rec.NumFields() != 0 {
+		t.Errorf("expected NumFields() = 0 on nil record, got %d", rec.NumFields())
+	}
+	if rec.Line() != 0 {
+		t.Errorf("expected Line() = 0 on nil record, got %d", rec.Line())
+	}
+	if rec.RawField(0) != nil {
+		t.Errorf("expected RawField(0) = nil on nil record")
+	}
+	if rec.Field(0) != nil {
+		t.Errorf("expected Field(0) = nil on nil record")
+	}
+	if rec.FieldString(0) != "" {
+		t.Errorf("expected FieldString(0) = \"\" on nil record")
+	}
+}
+
+func TestUnmarshalToNilSafety(t *testing.T) {
+	data := []byte("id,name\n1,Alice\n")
+	err := UnmarshalTo[TestGenericItem, *TestGenericItem](data, nil)
+	if err == nil {
+		t.Fatal("expected error when unmarshaling to nil slice pointer, got nil")
+	}
+
+	err = ParallelUnmarshalTo[TestGenericItem, *TestGenericItem](data, nil)
+	if err == nil {
+		t.Fatal("expected error when parallel unmarshaling to nil slice pointer, got nil")
+	}
+}
+
+func TestRecordFieldBoolEmpty(t *testing.T) {
+	data := "id,active\n1,\n"
+	r := NewReader(strings.NewReader(data))
+	rec, err := r.ReadRecord()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reading row 2
+	rec, err = r.ReadRecord()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := rec.FieldBool(1)
+	if err != nil {
+		t.Fatalf("expected empty fieldBool to return false and nil error, got err: %v", err)
+	}
+	if v != false {
+		t.Errorf("expected false, got %v", v)
+	}
+}
+

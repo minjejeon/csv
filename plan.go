@@ -19,6 +19,7 @@ type fieldPlan struct {
 	fieldType reflect.Type
 	tag       csvTag
 	setter    fieldSetter
+	zeroer    func(structPtr unsafe.Pointer)
 }
 
 type typePlan struct {
@@ -139,6 +140,76 @@ func getTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 	return plan, nil
 }
 
+func compileZeroer(t reflect.Type, offset uintptr) func(structPtr unsafe.Pointer) {
+	switch t.Kind() {
+	case reflect.String:
+		return func(structPtr unsafe.Pointer) {
+			*(*string)(unsafe.Add(structPtr, offset)) = ""
+		}
+	case reflect.Int:
+		return func(structPtr unsafe.Pointer) {
+			*(*int)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Int64:
+		return func(structPtr unsafe.Pointer) {
+			*(*int64)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Int32:
+		return func(structPtr unsafe.Pointer) {
+			*(*int32)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Int16:
+		return func(structPtr unsafe.Pointer) {
+			*(*int16)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Int8:
+		return func(structPtr unsafe.Pointer) {
+			*(*int8)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Uint:
+		return func(structPtr unsafe.Pointer) {
+			*(*uint)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Uint64:
+		return func(structPtr unsafe.Pointer) {
+			*(*uint64)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Uint32:
+		return func(structPtr unsafe.Pointer) {
+			*(*uint32)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Uint16:
+		return func(structPtr unsafe.Pointer) {
+			*(*uint16)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Uint8:
+		return func(structPtr unsafe.Pointer) {
+			*(*uint8)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Float64:
+		return func(structPtr unsafe.Pointer) {
+			*(*float64)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Float32:
+		return func(structPtr unsafe.Pointer) {
+			*(*float32)(unsafe.Add(structPtr, offset)) = 0
+		}
+	case reflect.Bool:
+		return func(structPtr unsafe.Pointer) {
+			*(*bool)(unsafe.Add(structPtr, offset)) = false
+		}
+	case reflect.Pointer:
+		return func(structPtr unsafe.Pointer) {
+			*(*unsafe.Pointer)(unsafe.Add(structPtr, offset)) = nil
+		}
+	default:
+		zeroVal := reflect.Zero(t)
+		return func(structPtr unsafe.Pointer) {
+			reflect.NewAt(t, unsafe.Add(structPtr, offset)).Elem().Set(zeroVal)
+		}
+	}
+}
+
 func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 	allFields := collectStructFields(t, 0, nil, nil)
 	if len(allFields) == 0 {
@@ -156,7 +227,7 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 		if targetName != "" {
 			// 1. Exact match with tag name
 			for i, h := range headers {
-				if h == targetName {
+				if !usedCols[i] && h == targetName {
 					colIdx = i
 					break
 				}
@@ -164,7 +235,7 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 			// 2. Case-insensitive match with tag name
 			if colIdx == -1 {
 				for i, h := range headers {
-					if strings.EqualFold(h, targetName) {
+					if !usedCols[i] && strings.EqualFold(h, targetName) {
 						colIdx = i
 						break
 					}
@@ -173,7 +244,7 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 		} else {
 			// 3. Exact match with field name
 			for i, h := range headers {
-				if h == sf.name {
+				if !usedCols[i] && h == sf.name {
 					colIdx = i
 					break
 				}
@@ -181,7 +252,7 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 			// 4. Case-insensitive match with field name
 			if colIdx == -1 {
 				for i, h := range headers {
-					if strings.EqualFold(h, sf.name) {
+					if !usedCols[i] && strings.EqualFold(h, sf.name) {
 						colIdx = i
 						break
 					}
@@ -189,15 +260,17 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 			}
 		}
 
-		if colIdx >= 0 && !usedCols[colIdx] {
+		if colIdx >= 0 {
 			usedCols[colIdx] = true
 			setter, err := compileSetter(sf.fieldType, sf.offset, sf.tag)
 			if err != nil {
 				return nil, err
 			}
+			zeroer := compileZeroer(sf.fieldType, sf.offset)
 			if len(sf.ptrOffsets) > 0 {
 				pos := sf.ptrOffsets
 				innerSetter := setter
+				innerZeroer := zeroer
 				setter = func(structPtr unsafe.Pointer, raw []byte) error {
 					curr := structPtr
 					for _, po := range pos {
@@ -210,6 +283,17 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 					}
 					return innerSetter(curr, raw)
 				}
+				zeroer = func(structPtr unsafe.Pointer) {
+					curr := structPtr
+					for _, po := range pos {
+						ptrLoc := (*unsafe.Pointer)(unsafe.Add(curr, po.offset))
+						if *ptrLoc == nil {
+							return
+						}
+						curr = *ptrLoc
+					}
+					innerZeroer(curr)
+				}
 			}
 			plannedFields = append(plannedFields, fieldPlan{
 				fieldName: sf.name,
@@ -219,6 +303,7 @@ func buildTypePlan(t reflect.Type, headers []string) (*typePlan, error) {
 				fieldType: sf.fieldType,
 				tag:       sf.tag,
 				setter:    setter,
+				zeroer:    zeroer,
 			})
 		}
 	}

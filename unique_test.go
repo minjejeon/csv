@@ -271,3 +271,24 @@ func BenchmarkUnmarshal_RepetitiveHandle(b *testing.B) {
 		}
 	}
 }
+
+type uniqueBoolTestStruct struct {
+	ID     int                 `csv:"id"`
+	Active unique.Handle[bool] `csv:"active,omitempty"`
+}
+
+func TestUniqueBoolOmitEmpty(t *testing.T) {
+	items := []uniqueBoolTestStruct{
+		{ID: 1, Active: unique.Make(true)},
+		{ID: 2, Active: unique.Make(false)},
+	}
+	out, err := Marshal(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := "id,active\n1,true\n2,\n"
+	if string(out) != expected {
+		t.Fatalf("expected %q, got %q", expected, string(out))
+	}
+}
+

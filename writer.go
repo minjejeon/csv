@@ -24,6 +24,19 @@ type Writer struct {
 	quoteByte  byte
 	scanner    blockScanner
 	hasScanner bool
+	err        error
+}
+
+func (w *Writer) checkDelimAndQuote() {
+	if !w.hasScanner || w.delimBytes == nil ||
+		(len(w.delimBytes) == 1 && w.Comma != 0 && rune(w.delimBytes[0]) != w.Comma) ||
+		(w.Delimiter != "" && string(w.delimBytes) != w.Delimiter) ||
+		(w.Quote != 0 && w.quoteByte != byte(w.Quote)) {
+		if len(w.delimBytes) == 1 && w.Comma != 0 && rune(w.delimBytes[0]) != w.Comma && (w.Delimiter == string(w.delimBytes) || w.Delimiter == ",") {
+			w.Delimiter = string(w.Comma)
+		}
+		w.initDelimAndQuote()
+	}
 }
 
 func (w *Writer) initDelimAndQuote() {
@@ -41,8 +54,11 @@ func (w *Writer) initDelimAndQuote() {
 	w.delimBytes = []byte(w.Delimiter)
 	if len(w.delimBytes) == 1 {
 		w.Comma = rune(w.delimBytes[0])
+		w.scanner = newBlockScanner(w.delimBytes[0], w.quoteByte)
+	} else {
+		// In multi-char delim mode, scanner doesn't scan single delim bytes
+		w.scanner = newBlockScanner(0, w.quoteByte)
 	}
-	w.scanner = newBlockScanner(w.delimBytes[0], w.quoteByte)
 	w.hasScanner = true
 }
 
@@ -91,6 +107,11 @@ func NewWriter(w io.Writer, opts ...any) *Writer {
 	return writer
 }
 
+// Error reports any error that occurred during a previous Write or Flush.
+func (w *Writer) Error() error {
+	return w.err
+}
+
 // Flush writes any buffered data to the underlying io.Writer.
 func (w *Writer) Flush() error {
 	if len(w.buf) == 0 {
@@ -99,6 +120,9 @@ func (w *Writer) Flush() error {
 	n, err := w.w.Write(w.buf)
 	if err != nil {
 		w.buf = w.buf[n:]
+		if w.err == nil {
+			w.err = err
+		}
 		return err
 	}
 	w.buf = w.buf[:0]
@@ -113,6 +137,9 @@ func (w *Writer) Close() error {
 			err = terr
 		}
 	}
+	if err != nil && w.err == nil {
+		w.err = err
+	}
 	if w.bufHolder != nil {
 		*w.bufHolder = w.buf
 		releaseWriteBuf(w.bufHolder)
@@ -126,8 +153,13 @@ func (w *Writer) fieldNeedsQuotes(field []byte) bool {
 	if len(field) == 0 {
 		return false
 	}
-	if len(w.delimBytes) > 1 && bytes.Contains(field, w.delimBytes) {
-		return true
+	if len(w.delimBytes) > 1 {
+		if bytes.Contains(field, w.delimBytes) {
+			return true
+		}
+		return bytes.IndexByte(field, w.quoteByte) != -1 ||
+			bytes.IndexByte(field, '\r') != -1 ||
+			bytes.IndexByte(field, '\n') != -1
 	}
 	return w.scanner.scanSpecial(field) >= 0
 }
@@ -152,9 +184,7 @@ func (w *Writer) writeFieldBytes(field []byte) {
 
 // Write writes a single CSV record to w.
 func (w *Writer) Write(record []string) error {
-	if !w.hasScanner {
-		w.initDelimAndQuote()
-	}
+	w.checkDelimAndQuote()
 
 	for i, field := range record {
 		if i > 0 {
@@ -187,17 +217,13 @@ func (w *Writer) WriteAll(records [][]string) error {
 
 // WriteFieldBytes writes a raw byte slice field with SIMD quoting if required.
 func (w *Writer) WriteFieldBytes(field []byte) {
-	if !w.hasScanner {
-		w.initDelimAndQuote()
-	}
+	w.checkDelimAndQuote()
 	w.writeFieldBytes(field)
 }
 
 // WriteDelimiter writes the field delimiter.
 func (w *Writer) WriteDelimiter() {
-	if !w.hasScanner {
-		w.initDelimAndQuote()
-	}
+	w.checkDelimAndQuote()
 	w.buf = append(w.buf, w.delimBytes...)
 }
 

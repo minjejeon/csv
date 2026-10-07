@@ -50,3 +50,9 @@
 | Stability & DX Task 3: UTF-8 BOM Auto-Stripping & Custom Time Format Tags | Completed | tag.go, setter.go, getter.go, reader.go, option.go |
 | Stability & DX Task 4: Symmetric Multi-Charset Writer Encoding | Completed | writer.go, encoder.go, csv.go |
 | Stability & DX Task 5: End-to-End Verification, Race Detection & Benchmarks | Completed | Full test & race pass, 0 regressions, README updated |
+| Audit Task 1: Writer Delimiter/Quote Mutation, Quoting Precision & Error Tracking | Completed | writer.go, writer_test.go |
+| Audit Task 2: Record Counting with Quoted Fields at EOF | Completed | csv.go, reader_test.go |
+| Audit Task 3: Struct Decoder Reused Struct Clearing & Duplicate Header Mapping | Completed | plan.go, decoder.go, getter.go, decoder_test.go, unique_test.go |
+| Audit Task 4: Reader DuckDB Fast-Path Quote Optimization & Pool/API Hardening | Completed | reader.go, pool.go, generic.go, record.go, audit_test.go |
+| Audit Task 5: End-to-End Verification, Race Detector & Fuzz Testing | Completed | Full verification across standard & SIMD, fuzzers |
+

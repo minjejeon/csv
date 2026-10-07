@@ -112,3 +112,38 @@ func FuzzStdlibEquivalence(f *testing.F) {
 		}
 	})
 }
+
+func FuzzWriterRoundTrip(f *testing.F) {
+	f.Add("simple", "text", "line")
+	f.Add("with,comma", "with\"quote\"", "with\nnewline")
+	f.Add("with\r\ncrlf", "\"\"escaped\"\"", "   spaces   ")
+	f.Add("", "", "")
+
+	f.Fuzz(func(t *testing.T, s1, s2, s3 string) {
+		var buf bytes.Buffer
+		w := NewWriter(&buf)
+		input := []string{s1, s2, s3}
+		if err := w.Write(input); err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+		if err := w.Flush(); err != nil {
+			t.Fatalf("Flush failed: %v", err)
+		}
+
+		r := NewReader(&buf)
+		defer r.Close()
+		rec, err := r.Read()
+		if err != nil {
+			t.Fatalf("Read failed for %q, %q, %q: %v\nOutput: %q", s1, s2, s3, err, buf.String())
+		}
+		if len(rec) != 3 {
+			t.Fatalf("expected 3 fields, got %d: %v", len(rec), rec)
+		}
+		for i := 0; i < 3; i++ {
+			if rec[i] != input[i] {
+				t.Fatalf("field %d mismatch:\ngot:  %q\nwant: %q\nraw: %q", i, rec[i], input[i], buf.String())
+			}
+		}
+	})
+}
+

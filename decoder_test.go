@@ -232,3 +232,57 @@ func TestStructuredDecodeError(t *testing.T) {
 	}
 }
 
+type reusedRowItem struct {
+	ID   int    `csv:"id"`
+	Age  int    `csv:"age"`
+	Name string `csv:"name"`
+}
+
+func TestDecoderMissingColReuse(t *testing.T) {
+	// Row 1 has id,age,name. Row 2 has only id (missing age and name columns).
+	data := "id,age,name\n1,30,Alice\n2\n"
+	dec, err := NewDecoder(strings.NewReader(data), WithFieldsPerRecord(-1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var row reusedRowItem
+	if err := dec.Decode(&row); err != nil {
+		t.Fatal(err)
+	}
+	if row.Age != 30 || row.Name != "Alice" {
+		t.Fatalf("row 1 unexpected: %+v", row)
+	}
+	if err := dec.Decode(&row); err != nil {
+		t.Fatal(err)
+	}
+	if row.ID != 2 {
+		t.Fatalf("row 2 ID = %d, want 2", row.ID)
+	}
+	if row.Age != 0 {
+		t.Fatalf("row 2 Age should be reset to 0, got %d", row.Age)
+	}
+	if row.Name != "" {
+		t.Fatalf("row 2 Name should be reset to empty string, got %q", row.Name)
+	}
+}
+
+type duplicateColStruct struct {
+	ID1 int `csv:"id"`
+	ID2 int `csv:"id"`
+}
+
+func TestDuplicateHeaders(t *testing.T) {
+	data := []byte("id,id\n10,20\n")
+	var res []duplicateColStruct
+	if err := Unmarshal(data, &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(res))
+	}
+	if res[0].ID1 != 10 || res[0].ID2 != 20 {
+		t.Fatalf("expected ID1=10, ID2=20, got ID1=%d, ID2=%d", res[0].ID1, res[0].ID2)
+	}
+}
+
+
